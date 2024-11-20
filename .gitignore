@@ -1,0 +1,49 @@
+# Ignore private notes
+**/private_notes.md
+
+# Environment variables
+**/.env
+
+# Virtual environments
+**/.venv/
+**/venv/
+**/env/
+
+# Python cache files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Python egg-info directories
+**/*.egg-info/
+
+# Local PDF files
+**/input_pdfs/
+**/downloaded_pdfs/
+
+# Reference files
+**/sample_outputs/
+
+# ell logdir
+logdir/
+temp.txt
+
+# Chroma DB
+chroma_db/
+
+# Private notes
+**/private_notes.md
+
+# Framework inputs/outputs
+**/framework_outputs/
+**/user_inputs/user_supplied_pdfs/*
+!**/user_inputs/user_supplied_pdfs/.gitkeep
+
+old_pre_run_folders/
+
+# Reference files/code
+ref/
+examples/
+test_outputs/
+journal/
