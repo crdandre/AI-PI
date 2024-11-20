@@ -15,10 +15,10 @@ class Revision(TypedDict):
     text: str
     author: Optional[str]
     date: Optional[str]
-    position: Dict[str, int]  # start and end positions
-    referenced_text: str  # Add this field
-    parent_id: Optional[str]  # for tracking related changes
-    formatting: Optional[Dict]  # for storing formatting changes
+    position: Dict[str, int] 
+    referenced_text: str
+    parent_id: Optional[str]
+    formatting: Optional[Dict]
 
 class Comment(TypedDict):
     id: str
@@ -26,7 +26,7 @@ class Comment(TypedDict):
     author: str
     date: str
     position: Dict[str, int]
-    referenced_text: str  # Add this field
+    referenced_text: str
     resolved: bool
     replies: List['Comment']
     related_revision_id: Optional[str]
