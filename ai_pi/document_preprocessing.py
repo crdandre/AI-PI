@@ -1,6 +1,10 @@
 """
 Extracts the process of revision from first draft to final draft,
 including comments, formatting changes, and their relationships.
+
+Currently removes references section. If it's desired to retain this information,
+changes would be needed to index the references and format them with appropriate
+context.
 """
 
 from docx import Document
@@ -8,6 +12,9 @@ from lxml import etree
 import zipfile
 from datetime import datetime
 from typing import Dict, List, Optional, TypedDict
+import os
+from pathlib import Path
+import re
 
 class Revision(TypedDict):
     id: str
@@ -69,9 +76,86 @@ def get_expanded_range(start: int, end: int, full_text: str, context_window: int
         while expanded_end < text_len and full_text[expanded_end] != '\n\n':
             expanded_end += 1
     
+    # Clean citations from the referenced text before returning
+    referenced_text = full_text[expanded_start:expanded_end]
+    referenced_text = clean_citations(referenced_text)
+    
+    # Adjust expanded_end based on cleaned text length
+    expanded_end = expanded_start + len(referenced_text)
+    
     return expanded_start, expanded_end
 
+def prepare_comment_text(comment: Dict) -> str:
+    """Format comment data into a single text string."""
+    text = (
+        f"[COMMENT ID: {comment['id']}]\n"
+        f"Position: chars {comment['position']['start']}-{comment['position']['end']}\n"
+        f"Context: \"{comment['referenced_text']}\"\n"
+        f"Comment: {comment['text']}\n"
+        f"Author: {comment['author']}\n"
+        f"Date: {comment['date']}\n"
+        f"Status: {'Resolved' if comment.get('resolved') else 'Unresolved'}"
+    )
+    
+    if comment.get('related_revision_id'):
+        text += f"\nRelated Revision: {comment['related_revision_id']}"
+    
+    if comment['replies']:
+        text += "\nReplies:"
+        for reply in comment['replies']:
+            reply_text = (
+                f"\n  - Reply by {reply['author']} on {reply['date']}:"
+                f"\n    {reply['text']}"
+                f"\n    Status: {'Resolved' if reply.get('resolved') else 'Unresolved'}"
+            )
+            text += reply_text
+    return text
+
+def prepare_revision_text(revision: Dict) -> str:
+    """Format revision data into a single text string."""
+    text = (
+        f"[REVISION ID: {revision['id']}]\n"
+        f"Position: chars {revision['position']['start']}-{revision['position']['end']}\n"
+        f"Context: \"{revision['referenced_text']}\"\n"
+        f"Change Type: {revision['type']}\n"
+        f"Modified Text: {revision['text']}\n"
+        f"Author: {revision['author']}\n"
+        f"Date: {revision['date']}"
+    )
+    
+    if revision.get('formatting'):
+        formatting_str = ', '.join(revision['formatting'].keys())
+        text += f"\nFormatting Changes: {formatting_str}"
+        
+    if revision.get('parent_id'):
+        text += f"\nParent Revision: {revision['parent_id']}"
+        
+    return text
+
+def clean_citations(text: str) -> str:
+    """Remove citations and references section from text while preserving readability."""
+    # Remove the References section and everything after it
+    if 'References' in text:
+        text = text.split('References')[0]
+    
+    # Remove parenthetical citations like (Smith et al., 2020)
+    text = re.sub(r'\([^()]*?\d{4}[^()]*?\)', '', text)
+    
+    # Remove numbered citations like [1] or [1,2,3]
+    text = re.sub(r'\[\d+(?:,\s*\d+)*\]', '', text)
+    
+    # Remove multiple spaces created by citation removal
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Fix spacing around punctuation
+    text = re.sub(r'\s+([.,;:])', r'\1', text)
+    
+    return text.strip()
+
 def extract_document_history(file_path: str) -> Dict:
+    """Extract document history and save processed text to files."""
+    document_history = {}
+    
     with zipfile.ZipFile(file_path, 'r') as docx:
         document_xml = docx.read('word/document.xml')
         tree = etree.fromstring(document_xml)
@@ -83,6 +167,9 @@ def extract_document_history(file_path: str) -> Dict:
             if element.tag == f'{{{namespace["w"]}}}t':
                 full_text.append(element.text if element.text else '')
         full_text = ''.join(full_text)
+        
+        # Clean citations from the full text
+        full_text = clean_citations(full_text)
 
         # Initialize document history
         document_history = {
@@ -168,16 +255,19 @@ def extract_document_history(file_path: str) -> Dict:
             comments_xml = docx.read('word/comments.xml')
             comments_tree = etree.fromstring(comments_xml)
             
+            comment_counter = 0
             for comment in comments_tree.findall('.//w:comment', namespace):
-                comment_id = comment.get('{%s}id' % namespace['w'])
-                position = comment_positions.get(comment_id, {'start': 0, 'end': 0})
+                original_id = comment.get('{%s}id' % namespace['w'])
+                new_id = str(comment_counter)
+                
+                position = comment_positions.get(original_id, {'start': 0, 'end': 0})
                 
                 start = position['start']
                 end = position['end']
                 expanded_start, expanded_end = get_expanded_range(start, end, full_text)
                 
                 comment_data = {
-                    'id': comment_id,
+                    'id': new_id,
                     'text': ''.join(comment.itertext()),
                     'author': comment.get('{%s}author' % namespace['w']),
                     'date': comment.get('{%s}date' % namespace['w']),
@@ -193,7 +283,7 @@ def extract_document_history(file_path: str) -> Dict:
                     'related_revision_id': None
                 }
                 
-                # Check if this is a reply to another comment
+                # Update parent reference if this is a reply
                 parent_comment_id = comment.get('{%s}parentId' % namespace['w'])
                 if parent_comment_id:
                     # Find parent comment and append this as reply
@@ -203,6 +293,7 @@ def extract_document_history(file_path: str) -> Dict:
                             break
                 else:
                     document_history['comments'].append(comment_data)
+                    comment_counter += 1
                 
                 if comment_data['author']:
                     document_history['metadata']['contributors'].add(comment_data['author'])
@@ -216,11 +307,48 @@ def extract_document_history(file_path: str) -> Dict:
         document_history['metadata']['comment_count'] = len(document_history['comments'])
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
+        # Create processed_documents directory if it doesn't exist
+        output_dir = Path('processed_documents')
+        output_dir.mkdir(exist_ok=True)
+        
+        # Generate base filename from input file
+        base_filename = Path(file_path).stem
+        
+        # Write all content to a single file with clear sections
+        with open(output_dir / f"{base_filename}_processed.txt", 'w', encoding='utf-8') as f:
+            # Write document metadata
+            f.write("=== DOCUMENT METADATA ===\n")
+            f.write(f"Document ID: {document_history['document_id']}\n")
+            f.write(f"Last Modified: {document_history['metadata']['last_modified']}\n")
+            f.write(f"Contributors: {', '.join(document_history['metadata']['contributors'])}\n\n")
+            
+            # Write main document content
+            f.write("=== DOCUMENT CONTENT ===\n")
+            f.write(full_text)
+            f.write("\n\n")
+            
+            # Write comments with context
+            if document_history['comments']:
+                f.write("=== COMMENTS ===\n")
+                for comment in document_history['comments']:
+                    f.write(prepare_comment_text(comment))
+                    f.write("\n\n")
+            
+            # Write revisions with context
+            if document_history['revisions']:
+                f.write("=== REVISIONS ===\n")
+                for revision in document_history['revisions']:
+                    f.write(prepare_revision_text(revision))
+                    f.write("\n\n")
+        
         return document_history
     
 
 #Testing Usage
 if __name__ == "__main__":
     document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx")
-    import json
-    print(json.dumps(document_history, indent=4, default=str))
+    
+    # Print summary of processed file
+    output_dir = Path('processed_documents')
+    processed_file = output_dir / f"ScolioticFEPaper_v7_processed.txt"
+    print(f"\nProcessed file saved as: {processed_file.absolute()}")

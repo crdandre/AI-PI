@@ -24,6 +24,7 @@
 
 # Reference files
 **/sample_outputs/
+**/processed_documents/
 
 # ell logdir
 logdir/
