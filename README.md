@@ -12,8 +12,27 @@ Jokes aside this is a tool to streamline the review process. Using prior materia
     - Create a cloud account name, i.e. "christians-nvidia-cloud"
     - Generate an API Key and store in `.env` as `NVIDIA_API_KEY`
 
+## Approach
+1. LlamaIndex-based Agentic RAG
+    - ReActAgent has inbuilt implementation in LlamaIndex, so starting with this
+    - At least one data collection to query (Prior reviewed docs as context)
+        - Many have separate documents, i.e. MyPaper_v{1-n}, it'd be nice to combine these into one coherent revision history
+        - Relating revisions to comments would be even better!
+        - Adding collections (indices) will change the tool format, etc. - take note of this.
+    - Could add a more general database of review pointers for academic papers based on field, or a broader database of reviewed documents with comments to better understand comment/response structure (sometimes comments can be sparse/spread out)
+    - {SOON} Should have autonomous and interactive modes to guide the agent like STORM
+2. Frontend
+    - Chat Interface
+    - Allows upload of .docx to embed as "PI Upload"
+    - Cyberpunk Einstein Feel
+    - Outputs .docx with comments and suggested revisions which the user can open in Word and approve as if they were emailed a reviewed document by a person
 
-### Give this a try to optimize the pipeline?
+
+## Improvement Notes
+### Give this a try to optimize the RAG parameters and data storage types?
 - https://github.com/KruxAI/ragbuilder
 
-### Two Paths: LlamaIndex only, or using DSPy to optimize prompts
+### Use DSPy/TextGrad to optimize prompts where applicable?
+    - Not sure yet how this may conflict with agents
+
+### Full local use option, dockerized option, etc.
