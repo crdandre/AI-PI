@@ -36,3 +36,10 @@ Jokes aside this is a tool to streamline the review process. Using prior materia
     - Not sure yet how this may conflict with agents
 
 ### Full local use option, dockerized option, etc.
+
+### Other Agent-Calling Methods
+- [FunctionCallingAgent vs ReActAgent within LlamaIndex](https://github.com/run-llama/llama_index/issues/15685)
+- DSPy [example](https://medium.com/@leighphil4/dspy-rag-with-llamaindex-programming-llms-over-prompting-1b12d12cbc43)
+- Other frameworks
+- Different problem-solving methods such as tree-search and topics discussed [here](https://www.youtube.com/watch?v=MXPYbjjyHXc)
+- [Agents From Scratch](https://learnbybuilding.ai/tutorials/dspy-agents-from-scratch)

@@ -11,7 +11,7 @@ from docx import Document
 from lxml import etree
 import zipfile
 from datetime import datetime
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict, Union
 import os
 from pathlib import Path
 import re
@@ -152,8 +152,18 @@ def clean_citations(text: str) -> str:
     
     return text.strip()
 
-def extract_document_history(file_path: str) -> Dict:
-    """Extract document history and save processed text to files."""
+def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
+    """
+    Extract document history and format as text, optionally saving to file.
+    
+    Args:
+        file_path: Path to the Word document
+        write_to_file: Whether to write the processed content to a file (default: False)
+    
+    Returns:
+        If write_to_file is True: Dictionary containing document history
+        If write_to_file is False: Formatted string containing document history
+    """
     document_history = {}
     
     with zipfile.ZipFile(file_path, 'r') as docx:
@@ -307,46 +317,51 @@ def extract_document_history(file_path: str) -> Dict:
         document_history['metadata']['comment_count'] = len(document_history['comments'])
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
-        # Create processed_documents directory if it doesn't exist
-        output_dir = Path('processed_documents')
-        output_dir.mkdir(exist_ok=True)
+        # Format the content
+        formatted_text = []
+        formatted_text.append("=== DOCUMENT METADATA ===")
+        formatted_text.append(f"Document ID: {document_history['document_id']}")
+        formatted_text.append(f"Last Modified: {document_history['metadata']['last_modified']}")
+        formatted_text.append(f"Contributors: {', '.join(document_history['metadata']['contributors'])}\n")
         
-        # Generate base filename from input file
-        base_filename = Path(file_path).stem
+        formatted_text.append("=== DOCUMENT CONTENT ===")
+        formatted_text.append(full_text)
+        formatted_text.append("\n")
         
-        # Write all content to a single file with clear sections
-        with open(output_dir / f"{base_filename}_processed.txt", 'w', encoding='utf-8') as f:
-            # Write document metadata
-            f.write("=== DOCUMENT METADATA ===\n")
-            f.write(f"Document ID: {document_history['document_id']}\n")
-            f.write(f"Last Modified: {document_history['metadata']['last_modified']}\n")
-            f.write(f"Contributors: {', '.join(document_history['metadata']['contributors'])}\n\n")
-            
-            # Write main document content
-            f.write("=== DOCUMENT CONTENT ===\n")
-            f.write(full_text)
-            f.write("\n\n")
-            
-            # Write comments with context
-            if document_history['comments']:
-                f.write("=== COMMENTS ===\n")
-                for comment in document_history['comments']:
-                    f.write(prepare_comment_text(comment))
-                    f.write("\n\n")
-            
-            # Write revisions with context
-            if document_history['revisions']:
-                f.write("=== REVISIONS ===\n")
-                for revision in document_history['revisions']:
-                    f.write(prepare_revision_text(revision))
-                    f.write("\n\n")
+        if document_history['comments']:
+            formatted_text.append("=== COMMENTS ===")
+            for comment in document_history['comments']:
+                formatted_text.append(prepare_comment_text(comment))
+                formatted_text.append("\n")
         
-        return document_history
+        if document_history['revisions']:
+            formatted_text.append("=== REVISIONS ===")
+            for revision in document_history['revisions']:
+                formatted_text.append(prepare_revision_text(revision))
+                formatted_text.append("\n")
+        
+        formatted_text = "\n".join(formatted_text)
+        
+        if write_to_file:
+            # Create processed_documents directory if it doesn't exist
+            output_dir = Path('processed_documents')
+            output_dir.mkdir(exist_ok=True)
+            
+            # Generate base filename from input file
+            base_filename = Path(file_path).stem
+            
+            # Write formatted text to file
+            with open(output_dir / f"{base_filename}_processed.txt", 'w', encoding='utf-8') as f:
+                f.write(formatted_text)
+            
+            return document_history
+        
+        return formatted_text
     
 
 #Testing Usage
 if __name__ == "__main__":
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx")
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=True)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
