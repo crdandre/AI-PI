@@ -29,8 +29,10 @@
 logdir/
 temp.txt
 
-# Chroma DB
+# DB
 chroma_db/
+vector_db/
+vector_store/
 
 # Private notes
 **/private_notes.md
