@@ -21,6 +21,15 @@ Jokes aside this is a tool to streamline the review process. Using prior materia
         - Adding collections (indices) will change the tool format, etc. - take note of this.
     - Could add a more general database of review pointers for academic papers based on field, or a broader database of reviewed documents with comments to better understand comment/response structure (sometimes comments can be sparse/spread out)
     - {SOON} Should have autonomous and interactive modes to guide the agent like STORM
+2. Workflow
+    - Ingestion
+    - Context
+    - Review
+        - Must know *where* to place the comments rather than just supply general comments, and apply both a comment and a suggested revision to this particular text
+        - This may necessitate working with input context other than the whole document to be reviewed, especially if llama compatibility is desired or any other 8192 token context model. 
+            - What approaches allow for this? Should this document be embedded as well? I want to separate this from the prior reviews used as context.
+    - Output
+        - [how to have a ReAct agent output intermediate steps (which have the revision comments in them)](https://github.com/run-llama/llama_index/issues/15952)
 2. Frontend
     - Chat Interface
     - Allows upload of .docx to embed as "PI Upload"
