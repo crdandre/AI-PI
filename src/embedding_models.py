@@ -38,24 +38,52 @@ class OpenAIEmbeddingModel(EmbeddingModel):
 
 
 class HFEmbeddingModel(EmbeddingModel):
-    def __init__(self, model: str = "nvidia/NV-Embed-v2"):
-        self.tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
-        self.model = AutoModel.from_pretrained(model, trust_remote_code=True)
-        self.model.eval()  # Set to evaluation mode
+    def __init__(self, model: str = "nvidia/NV-Embed-v2", device: str = None):
+        super().__init__()
+        self.model = model
+        self.device = device or self._get_best_device()
         
-    def get_embedding(self, text: str) -> Tuple[np.ndarray, int]:
-        inputs = self.tokenizer(text, return_tensors="pt", padding=True)
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            # Convert the output dictionary's tensor to numpy
-            if isinstance(outputs, dict):
-                # Get the first tensor from the dictionary
-                first_tensor = next(iter(outputs.values()))
-                embedding = first_tensor.numpy()[0]
-            else:
-                embedding = outputs.numpy()[0]
-        return embedding, len(inputs.input_ids[0])
-    
+        # Initialize model
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.model = self._initialize_model()
+        self.default_instruction = "Given a query about a document's content, retrieve relevant comments, revisions, and passages that address the query"
+
+    def _get_best_device(self) -> str:
+        if not torch.cuda.is_available():
+            return 'cpu'
+            
+        # Get GPU with most free memory
+        free_memory = []
+        for gpu_id in range(torch.cuda.device_count()):
+            torch.cuda.set_device(gpu_id)
+            free_memory.append(
+                torch.cuda.get_device_properties(gpu_id).total_memory - 
+                torch.cuda.memory_allocated(gpu_id)
+            )
+        best_gpu = free_memory.index(max(free_memory))
+        return f'cuda:{best_gpu}'
+
+    def _initialize_model(self):
+        model = AutoModel.from_pretrained(
+            self.model,
+            trust_remote_code=True,
+            torch_dtype=torch.float16
+        )
+        return model.to(self.device)
+
+    def get_embedding(self, text: str, is_query: bool = False) -> Tuple[np.ndarray, int]:
+        instruction = f"Instruct: {self.default_instruction}\nQuery: " if is_query else ""
+        
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            embedding = self.model.encode(
+                [text],
+                instruction=instruction,
+                max_length=32768
+            )[0]
+            embedding = torch.nn.functional.normalize(embedding, p=2, dim=0)
+            
+        return embedding.cpu().numpy(), len(self.tokenizer.encode(text))
+
 
 def get_embedding_model() -> EmbeddingModel:
     """Get embedding model based on environment configuration."""
@@ -108,4 +136,19 @@ def get_text_embeddings(
         for text, embedding, _ in embeddings:
             embedding_cache[text] = embedding
     
-    return np.array([e[1] for e in embeddings]), total_tokens
+    # Convert embeddings to numpy array, ensuring all have same shape
+    embedding_arrays = [e[1] for e in embeddings]
+    if not embedding_arrays:
+        return np.array([]), total_tokens
+    
+    # Check if all embeddings have the same shape
+    first_shape = embedding_arrays[0].shape
+    if not all(e.shape == first_shape for e in embedding_arrays):
+        raise ValueError(f"Embeddings have inconsistent shapes. Expected all to be {first_shape}")
+    
+    # Debug prints
+    print("Embedding shapes:")
+    for i, e in enumerate(embedding_arrays):
+        print(f"Text {i}: {e.shape}")
+    
+    return np.stack(embedding_arrays), total_tokens

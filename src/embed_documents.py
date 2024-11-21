@@ -9,6 +9,9 @@ from torch.nn import DataParallel
 from qdrant_client.http.models import PointStruct
 import uuid
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from embedding_models import get_text_embeddings
 
 @dataclass
@@ -194,10 +197,24 @@ class DocumentEmbedder:
 
     def find_similar(self, query: str, embedded_doc: Dict) -> List[Dict]:
         """Find similar items to query in embedded document."""
-        query_embedding, _ = self.embedding_model.get_embedding(query, is_query=True)
+        # Get query embedding using the same method as other embeddings
+        embeddings, _ = self.embed_batch([query])
+        query_embedding = embeddings[0]  # Get the first (and only) embedding
         
         results = []
-        for item_type in ['document', 'comments', 'revisions']:
+        # Compare with document content
+        if 'content' in embedded_doc:
+            doc_embedding = np.array(embedded_doc.get('embedding', []))
+            if len(doc_embedding) > 0:
+                sim_score = cosine_similarity([query_embedding], [doc_embedding])[0][0]
+                results.append({
+                    'type': 'document',
+                    'item': {'text': embedded_doc['content'], 'author': embedded_doc.get('author', 'unknown')},
+                    'similarity': sim_score
+                })
+        
+        # Compare with comments and revisions
+        for item_type in ['comments', 'revisions']:
             if item_type in embedded_doc:
                 items = embedded_doc[item_type]
                 for item in items:
@@ -225,7 +242,7 @@ if __name__ == "__main__":
     parser.add_argument('--store_path', type=str, default="vector_store",
                        help='Path to store vector database')
     parser.add_argument('--encoder_type', type=str, default="hf",
-                       help='Type of encoder to use (hf, openai, azure, together)')
+                       help='Type of encoder to use (hf, openai)')
     parser.add_argument('--model', type=str, default="sentence-transformers/all-mpnet-base-v2",
                        help='Model name (if using HuggingFace)')
     args = parser.parse_args()
@@ -237,10 +254,8 @@ if __name__ == "__main__":
 
     # Initialize vector store with appropriate dimensions
     vector_dimensions = {
-        "hf": 768,  # all-mpnet-base-v2 dimension
+        "hf": 4096,  # all-mpnet-base-v2 dimension
         "openai": 1536,  # text-embedding-3-small dimension
-        "azure": 1536,  # Azure OpenAI dimension
-        "together": 1024,  # BGE-large dimension
     }
     
     vector_dim = vector_dimensions.get(args.encoder_type, 768)  # default to HF dimension
