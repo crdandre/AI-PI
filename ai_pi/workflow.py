@@ -12,7 +12,7 @@ from ai_pi.reviewer_agent import ReviewerAgent
 from ai_pi.document_preprocessing import extract_document_history
 
 context_agent = ContextAgent(similarity_top_k=20, verbose=True)
-reviewer_agent = ReviewerAgent(max_iterations=20, verbose=True)
+reviewer_agent = ReviewerAgent()
 
 # Get formatted text directly
 doc_context = extract_document_history("examples/ScolioticFEPaper_v7.docx")
@@ -87,13 +87,20 @@ Focus on similar types of issues that were commonly addressed in previous review
 
 review_prompt = generate_review_prompt(doc_context, prior_review_context)
 
-review = reviewer_agent.generate_review(
-    prompt=review_prompt
+review = reviewer_agent.call_review(
+    context=review_prompt,
+    question=review_prompt + "Can you generate a review using this context?"
 )
 
-comments_and_revisions_prompt = generate_comments_and_revisions_prompt(review, doc_context, prior_review_context)
+print(review)
 
-comments_and_revisions = reviewer_agent.generate_comments_and_revisions(
-    prompt=comments_and_revisions_prompt
+comments_and_revisions_prompt = generate_comments_and_revisions_prompt(
+    review, doc_context, prior_review_context
 )
+
+comments_and_revisions = reviewer_agent.call_revise(
+    context=comments_and_revisions_prompt,
+    question=comments_and_revisions_prompt + "Can you generate a list of revisions using this context? For each item, provide three things: a match string in the original doc, a comment on that match string, and a suggested revision."
+)
+
 print(comments_and_revisions)
