@@ -7,15 +7,17 @@ Orchestrates execution of this workflow:
 - Outputting a .docx with the comments and revisions added (document_output.py)
 """
 
-from ai_pi.context_agent import ContextAgent, DSPyContextAgent
+from ai_pi.context_agent import ContextAgent
 from ai_pi.reviewer_agent import ReviewerAgent
 from ai_pi.document_preprocessing import extract_document_history
+from ai_pi.document_output import output_commented_document
 
 context_agent = ContextAgent(similarity_top_k=20, verbose=True)
 reviewer_agent = ReviewerAgent()
 
 # Get formatted text directly
-doc_context = extract_document_history("examples/ScolioticFEPaper_v7.docx")
+input_doc_path = "examples/ScolioticFEPaper_v7.docx"
+doc_context = extract_document_history(input_doc_path)
 
 prior_review_context = context_agent.query("Find the comments left for the prior documents. Capture the essence of when the feedback was given, by whom (provide names), and for what reason. The idea is to be able to map that type of feedback to another new document using specific details. Capture the tone of the feedback and related personality traits as well.")
 
@@ -103,4 +105,16 @@ comments_and_revisions = reviewer_agent.call_revise(
     question=comments_and_revisions_prompt + "Can you generate a list of revisions using this context? For each item, provide three things: a match string in the original doc, a comment on that match string, and a suggested revision."
 )
 
-print(comments_and_revisions)
+document_review_items = {
+    "match_strings": [item[0] for item in comments_and_revisions.revision_list],
+    "comments": [item[1] for item in comments_and_revisions.revision_list],
+    "revisions": [item[2] for item in comments_and_revisions.revision_list],
+}
+
+output_path = output_commented_document(
+    input_doc_path,
+    document_review_items,
+    "reviewed_document.docx"
+)
+
+print(document_review_items)
