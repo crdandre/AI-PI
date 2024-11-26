@@ -61,40 +61,54 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                     
                     # Add the matched text with comment and revision
                     if revision:
-                        # Create deletion
+                        # Create deletion run and add comment to it
                         del_run = paragraph.add_run()
+                        
+                        # Create run properties
+                        rPr = OxmlElement('w:rPr')
+                        
+                        # Create deletion element
                         del_element = OxmlElement('w:del')
                         del_element.set(qn('w:author'), 'AIPI')
                         del_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
                         
                         # Create text element for deletion
                         del_text = OxmlElement('w:t')
+                        del_text.set(qn('xml:space'), 'preserve')
                         del_text.text = match
+                        
+                        # Build the XML structure
+                        del_run._element.append(rPr)
+                        del_run._element.append(del_element)
                         del_element.append(del_text)
                         
-                        # Add deletion to run
-                        del_run._element.append(del_element)
+                        # Add comment to the deletion run
+                        del_run.add_comment(comment, author="AIPI", initials="AI")
                         
-                        # Create insertion
+                        # Create insertion run (without comment)
                         ins_run = paragraph.add_run()
+                        
+                        # Create run properties
+                        rPr = OxmlElement('w:rPr')
+                        
+                        # Create insertion element
                         ins_element = OxmlElement('w:ins')
                         ins_element.set(qn('w:author'), 'AIPI')
                         ins_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
                         
                         # Create text element for insertion
                         ins_text = OxmlElement('w:t')
+                        ins_text.set(qn('xml:space'), 'preserve')
                         ins_text.text = revision
-                        ins_element.append(ins_text)
                         
-                        # Add insertion to run
+                        # Build the XML structure
+                        ins_run._element.append(rPr)
                         ins_run._element.append(ins_element)
+                        ins_element.append(ins_text)
                     else:
-                        # If no revision, just add the matched text
+                        # If no revision, just add the matched text with comment
                         match_run = paragraph.add_run(match)
-                    
-                    # Add the comment to the appropriate run
-                    comment_run = ins_run if revision else match_run
-                    comment_run.add_comment(comment, author="AIPI", initials="AI")
+                        match_run.add_comment(comment, author="AIPI", initials="AI")
                     
                     # Add text after the match
                     if after_match:
