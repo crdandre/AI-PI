@@ -59,33 +59,51 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                     if before_match:
                         paragraph.add_run(before_match)
                     
-                    # Add the matched text as a separate run and add the comment to it
-                    match_run = paragraph.add_run(match)
-                    match_run.add_comment(comment, author="AIPI", initials="AI")
-                    print(f"Added comment: '{comment}'")
+                    # Add the matched text with comment and revision
+                    if revision:
+                        # Create deletion
+                        del_run = paragraph.add_run()
+                        del_element = OxmlElement('w:del')
+                        del_element.set(qn('w:author'), 'AIPI')
+                        del_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
+                        
+                        # Create text element for deletion
+                        del_text = OxmlElement('w:t')
+                        del_text.text = match
+                        del_element.append(del_text)
+                        
+                        # Add deletion to run
+                        del_run._element.append(del_element)
+                        
+                        # Create insertion
+                        ins_run = paragraph.add_run()
+                        ins_element = OxmlElement('w:ins')
+                        ins_element.set(qn('w:author'), 'AIPI')
+                        ins_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
+                        
+                        # Create text element for insertion
+                        ins_text = OxmlElement('w:t')
+                        ins_text.text = revision
+                        ins_element.append(ins_text)
+                        
+                        # Add insertion to run
+                        ins_run._element.append(ins_element)
+                    else:
+                        # If no revision, just add the matched text
+                        match_run = paragraph.add_run(match)
+                    
+                    # Add the comment to the appropriate run
+                    comment_run = ins_run if revision else match_run
+                    comment_run.add_comment(comment, author="AIPI", initials="AI")
                     
                     # Add text after the match
                     if after_match:
                         paragraph.add_run(after_match)
                     
-                    # If there's a revision, add it as a tracked change
+                    print(f"Added comment: '{comment}'")
                     if revision:
-                        # Create deletion and insertion elements
-                        del_run = paragraph.add_run()
-                        del_element = OxmlElement('w:del')
-                        del_element.set(qn('w:author'), 'AIPI')
-                        del_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
-                        del_run._element.append(del_element)
-                        del_run.text = match  # Add the text to be deleted
-                        
-                        ins_run = paragraph.add_run()
-                        ins_element = OxmlElement('w:ins')
-                        ins_element.set(qn('w:author'), 'AIPI')
-                        ins_element.set(qn('w:date'), '2024-03-21T12:00:00Z')
-                        ins_run._element.append(ins_element)
-                        ins_run.text = revision
-                        
                         print(f"Added revision: '{revision}'")
+                        
                 except Exception as e:
                     print(f"Error processing revision: {str(e)}")
                     print(f"Error type: {type(e)}")
