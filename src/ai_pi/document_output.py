@@ -6,7 +6,6 @@ leave the user able to parse through each and address them individually using
 this output.
 """
 import docx
-from docx.shared import RGBColor
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -33,7 +32,6 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
     # Iterate through each paragraph in the document
     for i, paragraph in enumerate(doc.paragraphs):
         text = paragraph.text
-        print(f"\nProcessing paragraph {i}: {text[:50]}...")
         
         for match, comment, revision in zip(
             document_review_items["match_strings"],
@@ -129,10 +127,28 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
 
 if __name__ == "__main__":
     # Test data
+    # test_review_items = {
+    #     "match_strings": ["Maximizing the accuracy of material property", "The pelvis was constrained"],
+    #     "comments": ["This is a sample comment", "Another review comment"],
+    #     "revisions": ["suggested revision", "another suggestion"]
+    # }
+    
     test_review_items = {
-        "match_strings": ["Maximizing the accuracy of material property", "The pelvis was constrained"],
-        "comments": ["This is a sample comment", "Another review comment"],
-        "revisions": ["suggested revision", "another suggestion"]
+        'match_strings': [
+            'The current study will build upon our previously published work on pediatric patient-specific FE modeling and growth', 
+            'Vertebral growth was modeled through adaptation of a region-specific orthotropic thermal expansion method described by Balasubramanian', 
+            'and adjusted linearly according to Risser', 
+        ],
+        'revisions': [
+            'The current study builds upon our previously published work on pediatric patient-specific FE modeling and growth, which has shown promising results in predicting scoliotic curve progression.',
+            'Vertebral growth was modeled using a region-specific orthotropic thermal expansion method, as described by Balasubramanian et al. (reference), which has been validated in previous studies.',
+            'The value for was initially set to 0.4 MPa-1, as reported by Shi et al. (reference), and then adjusted linearly based on the Risser sign, with a clear explanation of how the adjustment was made.',
+        ], 
+        'comments': [
+            'Added context to clarify the significance of the current study.', 
+            'Added reference and context to support the methodology.', 
+            'Improved clarity and added reference to support the methodology.'
+        ]
     }
     
     # Test paths - adjust these to your actual file locations
