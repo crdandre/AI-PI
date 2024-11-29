@@ -1,16 +1,9 @@
 from dotenv import load_dotenv
 load_dotenv()
 from llama_index.llms.nvidia import NVIDIA
-from llama_index.core.tools import QueryEngineTool
-from llama_index.core.agent import AgentRunner, ReActAgent, ReActAgentWorker
 from llama_index.core import Document
-from llama_index.core.node_parser import SimpleNodeParser
+from llama_index.core.node_parser import SentenceSplitter
 from typing import List, Dict
-
-from ai_pi.documents.document_embedding import ContextStorageInterface
-
-import os
-import dspy
 
 class ContextAgent:
     """
@@ -27,18 +20,29 @@ class ContextAgent:
         self.verbose = verbose
         
         # Use simple parser for initial sectioning
-        self.node_parser = SimpleNodeParser.from_defaults(
+        self.node_parser = SentenceSplitter.from_defaults(
             chunk_size=512,
-            chunk_overlap=50
+            chunk_overlap=128
         )
     
     def analyze_document(self, document_text: str) -> dict:
         """
         Create a true summary tree where each level summarizes its children.
         """
+        if self.verbose:
+            print(f"Starting document analysis. Text length: {len(document_text)} characters")
+            
         # 1. First split into base sections
+        if self.verbose:
+            print("Creating Document object...")
         doc = Document(text=document_text)
+        
+        if self.verbose:
+            print("Starting node parsing...")
         base_nodes = self.node_parser.get_nodes_from_documents([doc])
+        
+        if self.verbose:
+            print(f"Node parsing complete. Generated {len(base_nodes)} nodes")
         
         # 2. Build summary tree bottom-up
         section_summaries = self._summarize_base_sections(base_nodes)
@@ -63,18 +67,19 @@ class ContextAgent:
         """Create detailed summaries of base sections"""
         summaries = []
         
-        for node in nodes:
+        for i, node in enumerate(nodes):
+            if self.verbose:
+                print(f"Summarizing base section {i+1}/{len(nodes)}...")
+            
             prompt = """
-            Provide a detailed summary of this academic paper section:
-            1. Main Arguments/Points
-            2. Evidence/Methods Presented
-            3. Key Findings/Claims
-            4. Writing Style and Clarity
-            5. Potential Review Points
+            Provide a brief, focused summary of this academic paper section in 100 words or less:
+            1. Main Points (2-3 key ideas)
+            2. Evidence/Methods (if applicable)
+            3. Key Findings
             
             Section Text: {text}
             
-            Format as a structured summary that captures the essence of this section.
+            Be concise and focus on essential information only.
             """
             
             summary = self.llm.complete(prompt.format(text=node.text))
@@ -88,18 +93,19 @@ class ContextAgent:
     
     def _summarize_relationships(self, section_summaries: List[Dict]) -> Dict:
         """Create a summary of relationships between sections"""
+        if self.verbose:
+            print(f"Analyzing relationships between {len(section_summaries)} sections...")
+            
         prompt = """
-        Analyze the relationships between these section summaries:
-        1. Logical Flow and Transitions
-        2. Argument Development
-        3. Evidence Chain
-        4. Narrative Coherence
-        5. Cross-Section Dependencies
+        In 150 words or less, analyze the key relationships between these sections:
+        1. Logical Flow
+        2. Main Argument Development
+        3. Key Dependencies
         
         Section Summaries:
         {summaries}
         
-        Create a structured summary of how these sections work together.
+        Focus on essential connections only.
         """
         
         # Extract just the summaries for the prompt
@@ -119,14 +125,32 @@ class ContextAgent:
         section_summaries: List[Dict],
         relationship_summary: Dict
     ) -> Dict:
-        """Create high-level document summary"""
+        """Create high-level document summary structured for review guidance"""
+        if self.verbose:
+            print("Generating final document-level summary...")
+            
         prompt = """
-        Create a comprehensive document-level summary:
-        1. Overall Contribution and Significance
-        2. Paper Structure and Organization
-        3. Key Arguments and Evidence Chain
-        4. Writing Style and Clarity
-        5. Critical Review Points
+        Create a comprehensive summary to guide the paper's review.
+        Focus on:
+        1. Core Contribution
+           - Main claims/findings
+           - Significance in field
+           - Novel elements
+        
+        2. Research Approach
+           - Key methodological choices
+           - Data/evidence types
+           - Analysis strategies
+        
+        3. Paper Structure
+           - How arguments are built
+           - Evidence flow
+           - Key dependencies between sections
+        
+        4. Expected Standards
+           - Critical elements to verify
+           - Potential weak points to examine
+           - Required supporting evidence
         
         Using these section summaries:
         {section_summaries}
@@ -134,7 +158,7 @@ class ContextAgent:
         And their relationships:
         {relationships}
         
-        Provide a structured summary that a PI would use to guide their review.
+        Provide a structured review-oriented summary.
         """
         
         return {
