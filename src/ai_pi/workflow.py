@@ -7,10 +7,10 @@ Orchestrates execution of this workflow:
 - Outputting a .docx with the comments and revisions added (document_output.py)
 """
 
-from ai_pi.context_agent import ContextAgent
-from ai_pi.reviewer_agent import ReviewerAgent
-from ai_pi.document_preprocessing import extract_document_history
-from ai_pi.document_output import output_commented_document
+from ai_pi.llm.context import ContextAgent
+from ai_pi.llm.reviewer import ReviewerAgent
+from ai_pi.documents.document_ingestion import extract_document_history
+from ai_pi.documents.document_output import output_commented_document
 from ai_pi.temp_prompts import *
 
 context_agent = ContextAgent(similarity_top_k=20, verbose=True)

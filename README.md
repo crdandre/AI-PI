@@ -52,3 +52,40 @@ Jokes aside this is a tool to streamline the review process. Using prior materia
 - Other frameworks
 - Different problem-solving methods such as tree-search and topics discussed [here](https://www.youtube.com/watch?v=MXPYbjjyHXc)
 - [Agents From Scratch](https://learnbybuilding.ai/tutorials/dspy-agents-from-scratch)
+
+
+## Scratchpad
+1. First get the structure, themes, overall feel of the paper
+2. Given this, scrutinize each section wrt a set of requirements that involve detected PI preferences, best writing practices, guidelines from a journal, etc.
+3. Use any suggestions for improvement generated from the review phase to generate actionable changes to the document with explanations for the changes made
+4. Produce an output .docx with these comments and suggested revisions, able to be opened in Word and parsed through for addressing each comment individually, as well as one-click approved just like it'd be if a human reviewer suggested the changes
+
+The idea is that this not only saves the PI time, but also allows for a more personalized review process that can be tailored to the PI's preferences and the specific needs of the manuscript - it's low friction and not adversarial to the author and the PI, it seeks to extend them both.
+
+### Ingestion
+-Embed raw chunks
+- Use LLM to detect and summarize sections of the paper, and build a knowledge tree where parent summaries can be used to navigate to the relevant raw text of the paper (i.e. not necessarily the raw chunks, but rather the text detected by the LLM as bein ga "section" of the paper or subsection within a main section - variable tree depth is OK)
+- Embed both the raw chunks and this summary tree
+
+^This can be done independently or as part of the new document processing (user can supply their own context either before or during processing of a current document).
+
+### New Document Processing
+- Parse new doc
+- Generate hierarchical summary of the new doc (or for MVP just a simple summary)
+- Embed the new doc
+- Create a context-friendly summary that can be used to scrutinize things like the coherence of a section relative to the whole paper
+- Give a reviewer agent this summary and the ability to retrieve relevant raw text (using both the summary tree and the raw chunks)
+- This generates a list of comments and suggested revisions
+- Generate structured data: match strings, comments, suggested changes (i.e. removals and additions)
+- Output .docx with comments and suggested revisions
+
+
+## Learned Concepts
+1. Knowledge storage formats
+    - Flat
+    - Tree
+    - Graph
+2. information storage
+    - Embeddings stored in vector db (flat, so far - others may be possible)
+    - Large chunk to small chunk tree (llamaindex HierarchicalNodeParser)
+    - Summary to raw text tree (unsure of existing implementation)
