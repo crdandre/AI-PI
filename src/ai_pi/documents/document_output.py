@@ -29,53 +29,72 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
     print("\nLooking for these matches:", document_review_items["match_strings"])
     
     matches_found = 0
-    remaining_matches = list(zip(
+    # Keep original matches in a list that won't be modified
+    all_matches = list(zip(
         document_review_items["match_strings"],
         document_review_items["comments"],
         document_review_items["revisions"]
     ))
+    
+    # Track which matches have been successfully processed
+    processed_matches = set()
     
     # Iterate through each paragraph in the document
     for i, paragraph in enumerate(doc.paragraphs):
         text = paragraph.text.strip()
         normalized_text = ' '.join(text.split())
         
-        # Sort matches by length in reverse order
-        remaining_matches.sort(key=lambda x: len(x[0]), reverse=True)
-        
-        for match, comment, revision in remaining_matches[:]:
+        # Try each match that hasn't been processed yet
+        for match, comment, revision in all_matches:
+            # Skip if we've already processed this match
+            if match in processed_matches:
+                continue
+                
             normalized_match = ' '.join(match.split())
             
             # Try exact match first
             if normalized_match in normalized_text:
                 match_ratio = 100
-                match_location = text.index(match)
+                match_location = normalized_text.index(normalized_match)
+                # Update the text to use normalized version
+                text = normalized_text
+                match = normalized_match
                 if verbose:
                     print(f"Exact match found for: '{match}'")
             else:
-                # Use fuzzy matching if exact match fails, but with higher threshold
+                # Use fuzzy matching if exact match fails
                 match_ratio = fuzz.partial_ratio(normalized_match, normalized_text)
-                if match_ratio >= 90:  # Increased threshold for academic content
-                    windows = [(text[i:i+len(normalized_match)+20], i) for i in range(len(text)-len(normalized_match)+1)]
-                    if windows:
+                if match_ratio >= match_threshold:
+                    try:
+                        # Create windows with more padding for longer texts
+                        padding = min(50, len(text))
+                        windows = [(text[i:i+len(normalized_match)+padding], i) 
+                                 for i in range(len(text)-len(normalized_match)+1)]
+                        
+                        if not windows:
+                            continue
+                            
                         best_window, score = process.extractOne(
                             normalized_match,
                             [w[0] for w in windows]
                         )
                         # Find the index of the best window
-                        window_index = next(i for i, (window, _) in enumerate(windows) if window == best_window)
+                        window_index = next((i for i, (window, _) in enumerate(windows) 
+                                          if window == best_window), None)
+                        if window_index is None:
+                            continue
+                            
                         match_location = windows[window_index][1]
                         if verbose:
                             print(f"Fuzzy match found: '{match}' (score: {score})")
-                    else:
+                    except Exception as e:
+                        if verbose:
+                            print(f"Error in fuzzy matching: {str(e)}")
                         continue
                 else:
                     if verbose:
                         print(f"Low confidence match rejected: '{match}' (score: {match_ratio})")
                     continue
-            
-            matches_found += 1
-            print(f"Found match: '{match}' with confidence {match_ratio}%")
             
             try:
                 # Split the paragraph into parts
@@ -136,9 +155,11 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                 if after_match:
                     paragraph.add_run(after_match)
                 
-                # Remove the matched item from remaining_matches
-                remaining_matches.remove((match, comment, revision))
+                # Mark this match as processed
+                processed_matches.add(match)
+                matches_found += 1
                 
+                print(f"Found match: '{match}' with confidence {match_ratio}%")
                 print(f"Added comment: '{comment}'")
                 if revision:
                     print(f"Added revision: '{revision}'")
@@ -148,9 +169,10 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                 continue
     
     # Report unmatched strings
-    if remaining_matches:
+    unmatched = set(m[0] for m in all_matches) - processed_matches
+    if unmatched:
         print("\nWarning: The following matches were not found in the document:")
-        for match, _, _ in remaining_matches:
+        for match in unmatched:
             print(f"- '{match}'")
     
     print(f"\nTotal matches found: {matches_found}")

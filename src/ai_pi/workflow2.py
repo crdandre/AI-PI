@@ -164,12 +164,12 @@ if __name__ == "__main__":
     from llama_index.llms.openai import OpenAI
     
     # Example usage - using the same paths as document_output.py test    
-    input_path = "examples/example_abstract.docx"
+    input_path = "examples/ScolioticFEPaper_v7.docx"
     output_path = "examples/test_output_workflow2.docx"
 
     # Initialize both LLM types
-    llm = OpenAI(model="gpt-4o-mini")  # For context and summarizer
-    lm = dspy.LM('openai/gpt-4o-mini')  # For reviewer
+    llm = OpenAI(model="gpt-4o")  # For context and summarizer
+    lm = dspy.LM('openai/gpt-4o')  # For reviewer
     
     paper_review = PaperReview(
         llm=llm,
