@@ -52,48 +52,47 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                 
             normalized_match = ' '.join(match.split())
             
-            # Try exact match first
-            if normalized_match in normalized_text:
+            # Try exact match first with more context
+            full_context = normalized_text
+            if normalized_match in full_context:
                 match_ratio = 100
-                match_location = normalized_text.index(normalized_match)
-                # Update the text to use normalized version
-                text = normalized_text
+                match_location = full_context.index(normalized_match)
+                text = full_context
                 match = normalized_match
                 if verbose:
                     print(f"Exact match found for: '{match}'")
             else:
-                # Use fuzzy matching if exact match fails
-                match_ratio = fuzz.partial_ratio(normalized_match, normalized_text)
+                # Enhanced fuzzy matching with better context handling
+                match_ratio = fuzz.token_set_ratio(normalized_match, full_context)
                 if match_ratio >= match_threshold:
                     try:
-                        # Create windows with more padding for longer texts
-                        padding = min(50, len(text))
-                        windows = [(text[i:i+len(normalized_match)+padding], i) 
-                                 for i in range(len(text)-len(normalized_match)+1)]
+                        # Use larger context windows for better matching
+                        window_size = len(normalized_match) * 2
+                        windows = []
                         
-                        if not windows:
-                            continue
-                            
-                        best_window, score = process.extractOne(
-                            normalized_match,
-                            [w[0] for w in windows]
-                        )
-                        # Find the index of the best window
-                        window_index = next((i for i, (window, _) in enumerate(windows) 
-                                          if window == best_window), None)
-                        if window_index is None:
-                            continue
-                            
-                        match_location = windows[window_index][1]
+                        for i in range(max(0, len(text) - window_size + 1)):
+                            window_text = text[i:i + window_size]
+                            window_score = fuzz.token_set_ratio(normalized_match, window_text)
+                            windows.append((window_text, i, window_score))
+                        
+                        # Sort windows by score and get the best match
+                        best_window = max(windows, key=lambda x: x[2])
+                        match_location = best_window[1]
+                        
+                        # Verify the match position
+                        context_before = text[max(0, match_location-50):match_location]
+                        context_after = text[match_location:match_location+len(normalized_match)+50]
+                        
                         if verbose:
-                            print(f"Fuzzy match found: '{match}' (score: {score})")
+                            print(f"Context before: '{context_before}'")
+                            print(f"Matched text: '{text[match_location:match_location+len(normalized_match)]}'")
+                            print(f"Context after: '{context_after}'")
+                            
                     except Exception as e:
                         if verbose:
                             print(f"Error in fuzzy matching: {str(e)}")
                         continue
                 else:
-                    if verbose:
-                        print(f"Low confidence match rejected: '{match}' (score: {match_ratio})")
                     continue
             
             try:

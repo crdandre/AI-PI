@@ -89,3 +89,8 @@ The idea is that this not only saves the PI time, but also allows for a more per
     - Embeddings stored in vector db (flat, so far - others may be possible)
     - Large chunk to small chunk tree (llamaindex HierarchicalNodeParser)
     - Summary to raw text tree (unsure of existing implementation)
+
+### MVP Progression
+- 11/29: All code working, but feedback both isn't being output correctly (interferes with document text) and the feedback itself is not of a high enough quality to be useful.
+    - Next step: what is missing? Overall feel of the paper? Narrative/structure level feedback given as a report? It's giving all sentence/clarity feedback at the moment, but not addressing the overall quality of the science/message/narrative/methods, etc.
+    - Should be able to tune a "threshold" for how much feedback to give (i.e. how perfectionist the reviewer is, to keep the focus on the highest prio points)
