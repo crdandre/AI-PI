@@ -98,24 +98,32 @@ class PaperReview:
             self.logger.debug(f"Full section content: {section['original_text'][:200]}...")
             
             try:
+                # Convert LlamaIndex response to plain string
+                paper_context = {
+                    'paper_summary': str(document_structure['document_summary']['document_analysis'].text)
+                }
+                
                 review = self.section_reviewer.review_section(
                     section_text=section['original_text'],
                     section_type=section['section_title'],
-                    paper_context={'paper_summary': document_structure['document_summary']['document_analysis']}
+                    paper_context=paper_context  # Now using plain string data
                 )
                 
                 self.logger.debug(f"Full review response: {review}")
                 section_reviews.append(review)
                 
-                # Add review points if they exist
-                if review and 'review' in review and review['review']:
-                    current_matches = len(review['review'].get('match_strings', []))
-                    self.logger.info(f"Found {current_matches} review points in section {i}")
-                    self.logger.debug(f"Review points: {review['review']}")
+                # Fix: Extract review data directly from the review response
+                if review:
+                    current_matches = review.get('match_strings', [])
+                    current_comments = review.get('comments', [])
+                    current_revisions = review.get('revisions', [])
                     
-                    match_strings.extend(review['review'].get('match_strings', []))
-                    comments.extend(review['review'].get('comments', []))
-                    revisions.extend(review['review'].get('revisions', []))
+                    self.logger.info(f"Found {len(current_matches)} review points in section {i}")
+                    self.logger.debug(f"Review points: {review}")
+                    
+                    match_strings.extend(current_matches)
+                    comments.extend(current_comments)
+                    revisions.extend(current_revisions)
                 else:
                     self.logger.warning(f"No review points found for section {i}")
                     

@@ -50,4 +50,4 @@ ref/
 examples/
 test_outputs/
 journal/
-logs/
+**/logs/
