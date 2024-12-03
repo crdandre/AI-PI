@@ -14,77 +14,43 @@ class ReviewItem(dspy.Signature):
     """Individual review item structure"""
     match_text = dspy.OutputField(desc="Exact text to match")
     comment = dspy.OutputField(desc="Review comment")
-    revision = dspy.OutputField(desc="Complete revised text, leave empty if only commenting")
-    comment_only = dspy.OutputField(desc="Boolean indicating if this should be just a comment without revision")
+    revision = dspy.OutputField(desc="Complete revised text")
 
 class ReviewerSignature(dspy.Signature):
     """Generate high-level scientific review feedback for a section of text.
     
-    You are a senior academic reviewer with expertise in providing strategic feedback.
-    For each issue you identify, carefully consider the most appropriate type of feedback:
-
-    1. Comments only (no revision) when:
-       - Asking for clarification or additional information
-       - Suggesting broader methodological changes
-       - Questioning scientific assumptions
-       - Requesting additional analyses
-       - Noting potential implications
+    You are a senior academic reviewer with expertise in providing strategic, high-level feedback.
+    Focus on scientific merit, methodology soundness, and theoretical contributions rather than
+    minor writing issues. After generating feedback, reflect on whether your comments address
+    substantive scientific concerns.
     
-    2. Revisions only when:
-       - Fixing clear grammatical errors
-       - Improving sentence structure
-       - Correcting technical terminology
-       - Adding missing references
-    
-    3. Both comment and revision when:
-       - Suggesting structural improvements while explaining why
-       - Addressing clarity issues with specific suggestions
-       - Improving scientific precision while explaining the importance
-       - Enhancing methodology descriptions with rationale
-    
-    You must identify at least 3-5 issues per section, considering:
-    - Scientific rigor and methodology
-    - Clarity and logical flow
-    - Technical accuracy
-    - Writing style and effectiveness
-    - Grammar and structure (when impacting comprehension)
-    
-    For each issue, reflect on whether it needs a comment, revision, or both.
+    For example:
+    Input:
+        section_text: "The model predicted curve progression with an average error of 5 degrees."
+        section_type: "Results"
+        context: "Paper about scoliosis modeling"
+    Output:
+        initial_analysis: "The results lack scientific rigor in three areas: (1) no statistical validation, 
+            (2) missing comparison with state-of-the-art methods, (3) no discussion of clinical significance."
+        reflection: "My feedback appropriately focuses on core scientific issues rather than superficial edits. 
+            The comments address methodology, validation, and clinical relevance."
+        review_items: [
+            {
+                "match_text": "The model predicted curve progression with an average error of 5 degrees.",
+                "comment": "The results require statistical validation (e.g., confidence intervals) and 
+                    discussion of clinical significance. How does this error rate impact treatment decisions?",
+                "revision": "The model predicted curve progression with an average error of 5° (95% CI: 3.2-6.8°). 
+                    This accuracy level is clinically significant as it falls within the threshold needed for 
+                    reliable treatment planning (< 7°), based on established clinical guidelines."
+            }
+        ]
     """
     section_text = dspy.InputField(desc="The text content of the section to review")
     section_type = dspy.InputField(desc="The type of section (e.g., Methods, Results)")
     context = dspy.InputField(desc="Additional context about the paper")
     initial_analysis = dspy.OutputField(desc="Initial high-level analysis of scientific concerns")
-    reflection = dspy.OutputField(
-        desc="Reflection on feedback types chosen and their appropriateness"
-    )
-    review_items = dspy.OutputField(
-        desc="List of review items with carefully chosen feedback types", 
-        format=list[ReviewItem]
-    )
-
-class CommunicationReview(dspy.Signature):
-    """Evaluate writing style, narrative clarity, and communication effectiveness.
-    
-    Focus on high-level writing aspects like narrative flow, clarity of explanations,
-    and effectiveness of scientific communication. Avoid minor grammar/spelling issues.
-    
-    Example Output:
-        writing_assessment: "The paper presents complex ideas clearly, but lacks smooth 
-            transitions between sections. Technical concepts are well-explained for the 
-            target audience."
-        narrative_strengths: ["Clear problem statement", "Effective use of examples"]
-        narrative_weaknesses: ["Section transitions need work", "Methods section assumes 
-            too much background knowledge"]
-        style_recommendations: ["Add transition paragraphs between major sections", 
-            "Include more context for technical terms"]
-    """
-    section_analyses = dspy.InputField(desc="List of section-level analyses")
-    paper_context = dspy.InputField(desc="Overall paper context including target audience")
-    writing_assessment = dspy.OutputField(desc="Overall assessment of writing quality and clarity")
-    narrative_strengths = dspy.OutputField(desc="Key strengths in narrative and communication")
-    narrative_weaknesses = dspy.OutputField(desc="Areas for improvement in narrative and communication")
-    style_recommendations = dspy.OutputField(desc="Specific recommendations for improving writing style")
+    reflection = dspy.OutputField(desc="Self-reflection on whether feedback addresses core scientific issues")
+    review_items = dspy.OutputField(desc="List of review items in JSON format", format=list[ReviewItem])
 
 class FinalReviewSignature(dspy.Signature):
     """Generate final synthesized review across all sections."""
@@ -94,8 +60,6 @@ class FinalReviewSignature(dspy.Signature):
     key_strengths = dspy.OutputField(desc="Major scientific strengths identified")
     key_weaknesses = dspy.OutputField(desc="Major scientific weaknesses identified")
     recommendations = dspy.OutputField(desc="High-priority recommendations for improvement")
-    communication_review = dspy.OutputField(desc="Assessment of writing style and clarity")
-    style_recommendations = dspy.OutputField(desc="Recommendations for improving communication")
 
 class SectionReviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
@@ -107,7 +71,6 @@ class SectionReviewer(dspy.Module):
         # we should use a prompt template or modify the signature
         self.reviewer = dspy.ChainOfThought(ReviewerSignature)
         self.final_reviewer = dspy.ChainOfThought(FinalReviewSignature)
-        self.communication_reviewer = dspy.ChainOfThought(CommunicationReview)
         
         # Add example as a class attribute if needed for reference
         self.example_input = {
@@ -121,51 +84,13 @@ class SectionReviewer(dspy.Module):
                 {
                     "match_text": "The model predicted curve progression with an average error of 5 degrees.",
                     "comment": "The error metric should be specified (RMSE, MAE?) and compared to previous work.",
-                    "revision": "",  # Empty since this is a suggestion for the author to implement
-                    "comment_only": False
+                    "revision": "The model predicted curve progression with a root mean square error of 5 degrees, improving upon previous methods which reported errors of 8-10 degrees."
                 }
             ]
         }
         
         self.engine = engine
         self.verbose = verbose
-
-    def review_paper(self, sections: list[dict], paper_context: dict) -> dict:
-        """Review paper by getting overall view first, then diving into sections"""
-        try:
-            with dspy.settings.context(lm=self.engine):
-                # First get the overall paper review
-                final_review = self.final_reviewer(
-                    section_analyses=sections,  # Pass all sections for initial overview
-                    paper_context=paper_context
-                )
-                
-                # Update context with the overall analysis
-                enhanced_context = {
-                    **paper_context,
-                    'overall_assessment': final_review.overall_assessment,
-                    'key_strengths': final_review.key_strengths,
-                    'key_weaknesses': final_review.key_weaknesses
-                }
-
-                # Now review individual sections with enhanced context
-                section_reviews = []
-                for section in sections:
-                    review = self.review_section(
-                        section['text'],
-                        section['type'],
-                        enhanced_context  # Use enhanced context for better section reviews
-                    )
-                    section_reviews.append(review)
-
-                return {
-                    'section_reviews': section_reviews,
-                    'final_review': final_review
-                }
-
-        except Exception as e:
-            logger.error(f"Error in paper review: {str(e)}")
-            return self._create_empty_review()
 
     def review_section(self, section_text: str, section_type: str, paper_context: dict) -> dict:
         """
@@ -177,8 +102,19 @@ class SectionReviewer(dspy.Module):
             
             result = self.forward(section_text, section_type, paper_context)
             
-            # Return the result directly without unwrapping
-            return result
+            # The result is a dspy.Prediction object with a 'review' field
+            # We should return the dictionary directly since workflow2.py expects it
+            if hasattr(result, 'review'):
+                return result.review  # Return just the review dict, not wrapped in another dict
+            
+            logger.warning("No review field found in result")
+            return {
+                'review': {  # Keep the nested structure
+                    'match_strings': [],
+                    'comments': [],
+                    'revisions': []
+                }
+            }
                 
         except Exception as e:
             if self.verbose:
@@ -190,6 +126,62 @@ class SectionReviewer(dspy.Module):
                     'revisions': []
                 }
             }
+
+    def forward(
+        self,
+        section_text: str,
+        section_type: str,
+        paper_context: dict
+    ) -> dspy.Prediction:
+        """Review a section using chain-of-thought reasoning with scientific depth validation."""
+        if not section_text or not section_type:
+            logger.warning("Empty input received")
+            return self._create_empty_review()
+
+        try:
+            with dspy.settings.context(lm=self.engine):
+                # Get initial review result
+                result = self.reviewer(
+                    section_text=section_text,
+                    section_type=section_type,
+                    context=paper_context.get('paper_summary', '')
+                )
+                
+                # Validate scientific depth of the review
+                if not self._validate_scientific_depth(result):
+                    logger.warning("Review lacks scientific depth - requesting revision")
+                    # Retry with explicit instruction to focus on scientific aspects
+                    result = self.reviewer(
+                        section_text=section_text,
+                        section_type=section_type,
+                        context=f"{paper_context.get('paper_summary', '')} INSTRUCTION: Focus specifically on "
+                               f"methodology, theoretical foundations, and scientific implications. Avoid "
+                               f"superficial writing suggestions."
+                    )
+                
+                # Create the expected review structure with additional fields
+                review_data = {
+                    'match_strings': [],
+                    'comments': [],
+                    'revisions': [],
+                    'initial_analysis': result.initial_analysis,
+                    'reflection': result.reflection
+                }
+                
+                # Process review items (rest of the processing remains the same)
+                items = self._parse_review_items(result.review_items)
+                for item in items:
+                    if self._is_valid_review_item(item) and self._contains_match_text(item, section_text):
+                        review_data['match_strings'].append(item.get('match_text') if isinstance(item, dict) else item.match_text)
+                        review_data['comments'].append(item.get('comment') if isinstance(item, dict) else item.comment)
+                        review_data['revisions'].append(item.get('revision') if isinstance(item, dict) else item.revision)
+                
+                logger.debug(f"Processed review data: {review_data}")
+                return dspy.Prediction(review=review_data)
+                
+        except Exception as e:
+            logger.error(f"Error in forward method: {str(e)}", exc_info=True)
+            return self._create_empty_review()
 
     def _validate_scientific_depth(self, result) -> bool:
         """
@@ -272,6 +264,7 @@ class SectionReviewer(dspy.Module):
         )
 
     def _process_review_items(self, review_json: str, section_text: str) -> dict:
+        """Helper method to process review items and handle serialization"""
         review_items = {
             'match_strings': [],
             'comments': [],
@@ -279,55 +272,41 @@ class SectionReviewer(dspy.Module):
         }
         
         try:
-            parsed_response = json.loads(review_json) if isinstance(review_json, str) else review_json
+            # Handle potential string escaping
+            if isinstance(review_json, str):
+                review_json = review_json.replace("'", '"')
+            
+            parsed_response = json.loads(review_json)
             
             for item in parsed_response.get('review_items', []):
                 match_text = str(item.get('match_text', '')).strip()
                 
                 if match_text and match_text in section_text:
-                    comment = str(item.get('comment', ''))
-                    revision = str(item.get('revision', ''))
-                    comment_only = item.get('comment_only', False)
-                    
-                    # Always include the comment
                     review_items['match_strings'].append(match_text)
-                    review_items['comments'].append(comment)
+                    review_items['comments'].append(str(item.get('comment', '')))
+                    review_items['revisions'].append(str(item.get('revision', '')))
                     
-                    # Include revision only if it's not a comment-only item and has content
-                    review_items['revisions'].append(revision if not comment_only and revision else '')
-                    
-        except Exception as e:
-            logger.error(f"Error processing review items: {str(e)}")
-            
+        except json.JSONDecodeError as e:
+            if self.verbose:
+                print(f"JSON parsing error: {str(e)}")
+                
         return review_items
 
     def compile_final_review(self, section_analyses: list, paper_context: dict) -> dict:
         """Compile a final high-level review synthesizing all sections."""
         try:
             with dspy.settings.context(lm=self.engine):
-                # Get scientific review
                 final_review = self.final_reviewer(
                     section_analyses=section_analyses,
                     paper_context=paper_context
                 )
                 
-                # Get communication review
-                comm_review = self.communication_reviewer(
-                    section_analyses=section_analyses,
-                    paper_context=paper_context
-                )
-                
+                # Ensure we have proper lists of strings
                 return {
                     'overall_assessment': str(final_review.overall_assessment),
                     'key_strengths': [str(s) for s in (final_review.key_strengths if isinstance(final_review.key_strengths, list) else [final_review.key_strengths])],
                     'key_weaknesses': [str(w) for w in (final_review.key_weaknesses if isinstance(final_review.key_weaknesses, list) else [final_review.key_weaknesses])],
-                    'recommendations': [str(r) for r in (final_review.recommendations if isinstance(final_review.recommendations, list) else [final_review.recommendations])],
-                    'communication_review': {
-                        'writing_assessment': str(comm_review.writing_assessment),
-                        'narrative_strengths': [str(s) for s in (comm_review.narrative_strengths if isinstance(comm_review.narrative_strengths, list) else [comm_review.narrative_strengths])],
-                        'narrative_weaknesses': [str(w) for w in (comm_review.narrative_weaknesses if isinstance(comm_review.narrative_weaknesses, list) else [comm_review.narrative_weaknesses])],
-                        'style_recommendations': [str(r) for r in (comm_review.style_recommendations if isinstance(comm_review.style_recommendations, list) else [comm_review.style_recommendations])]
-                    }
+                    'recommendations': [str(r) for r in (final_review.recommendations if isinstance(final_review.recommendations, list) else [final_review.recommendations])]
                 }
         except Exception as e:
             logger.error(f"Error compiling final review: {str(e)}")
@@ -335,85 +314,8 @@ class SectionReviewer(dspy.Module):
                 'overall_assessment': "Error generating final review",
                 'key_strengths': [],
                 'key_weaknesses': [],
-                'recommendations': [],
-                'communication_review': {
-                    'writing_assessment': "Error generating communication review",
-                    'narrative_strengths': [],
-                    'narrative_weaknesses': [],
-                    'style_recommendations': []
-                }
+                'recommendations': []
             }
-
-    def _build_enhanced_context(self, paper_context: dict, section_type: str) -> str:
-        """Build richer context including paper-level insights"""
-        context_parts = []
-        
-        # Basic paper info
-        context_parts.append(paper_context.get('paper_summary', ''))
-        
-        # Overall assessment
-        if 'overall_assessment' in paper_context:
-            context_parts.append(f"Overall assessment: {paper_context['overall_assessment']}")
-        
-        # Key points
-        for field in ['key_strengths', 'key_weaknesses', 'recommendations']:
-            if field in paper_context:
-                items = paper_context[field]
-                if items:
-                    context_parts.append(f"{field.replace('_', ' ').title()}:")
-                    context_parts.extend([f"- {item}" for item in items])
-        
-        return "\n".join(context_parts)
-
-    def _get_section_specific_guidance(
-        self,
-        section_type: str,
-        weaknesses: list,
-        recommendations: list
-    ) -> str:
-        """Generate section-specific guidance based on paper-level insights"""
-        # Filter relevant weaknesses and recommendations for this section
-        relevant_items = [
-            item for item in weaknesses + recommendations
-            if section_type.lower() in item.lower()
-        ]
-        
-        if relevant_items:
-            return "Key considerations for this section:\n" + "\n".join(
-                f"- {item}" for item in relevant_items
-            )
-        return ""
-
-    def _check_section_alignment(
-        self,
-        section_text: str,
-        section_type: str,
-        paper_context: dict
-    ) -> dict:
-        """Check how well section aligns with paper-level goals"""
-        try:
-            # Use a simpler prompt to check alignment
-            alignment_prompt = f"""
-            Given the paper's main goals:
-            {paper_context.get('overall_assessment', '')}
-            
-            Check how well this {section_type} section supports those goals.
-            """
-            
-            with dspy.settings.context(lm=self.engine):
-                alignment = self.reviewer(
-                    section_text=section_text,
-                    section_type=section_type,
-                    context=alignment_prompt
-                )
-                
-            return {
-                'supports_goals': alignment.initial_analysis,
-                'alignment_issues': alignment.reflection
-            }
-        except Exception as e:
-            logger.warning(f"Alignment check failed: {str(e)}")
-            return {}
 
 
 if __name__ == "__main__":
@@ -436,8 +338,4 @@ if __name__ == "__main__":
         test_context
     )
     print("\nFinal Review:")
-    # Convert Prediction to dict before JSON serialization
-    review_dict = {
-        'review': review.review if hasattr(review, 'review') else review
-    }
-    print(json.dumps(review_dict, indent=2))
+    print(json.dumps(review, indent=2))
