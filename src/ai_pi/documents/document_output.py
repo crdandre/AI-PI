@@ -9,7 +9,6 @@ import docx
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
 
 def enable_track_changes(doc):
     """Enable track changes in the document."""
@@ -20,9 +19,88 @@ def enable_track_changes(doc):
     settings = doc.settings._element
     settings.append(tag)
 
+def add_high_level_review(doc, high_level_review):
+    """Add high-level review as a new section at the start of the document."""
+    # Add title
+    doc.add_heading('Scientific Review Summary', level=1)
+    
+    # Add overall assessment
+    doc.add_heading('Overall Assessment', level=2)
+    doc.add_paragraph(high_level_review.get('overall_assessment', 'No overall assessment provided.'))
+    
+    # Add key strengths
+    doc.add_heading('Key Strengths', level=2)
+    strengths = high_level_review.get('key_strengths', [])
+    if strengths:
+        for strength in strengths:
+            doc.add_paragraph(strength.strip(), style='List Bullet')
+    else:
+        doc.add_paragraph('No key strengths specified.')
+    
+    # Add key weaknesses
+    doc.add_heading('Key Weaknesses', level=2)
+    weaknesses = high_level_review.get('key_weaknesses', [])
+    if weaknesses:
+        for weakness in weaknesses:
+            doc.add_paragraph(weakness.strip(), style='List Bullet')
+    else:
+        doc.add_paragraph('No key weaknesses specified.')
+    
+    # Add recommendations
+    doc.add_heading('Key Recommendations', level=2)
+    recommendations = high_level_review.get('recommendations', [])
+    if recommendations:
+        for rec in recommendations:
+            doc.add_paragraph(rec.strip(), style='List Bullet')
+    else:
+        doc.add_paragraph('No recommendations provided.')
+    
+    # Add communication review section
+    if 'communication_review' in high_level_review:
+        doc.add_heading('Writing and Communication Review', level=2)
+        comm_review = high_level_review['communication_review']
+        
+        # Writing assessment (as regular paragraph)
+        doc.add_paragraph(comm_review.get('writing_assessment', 'No writing assessment provided.'))
+        
+        # Narrative strengths
+        if comm_review.get('narrative_strengths'):
+            doc.add_heading('Narrative Strengths', level=3)
+            for strength in comm_review['narrative_strengths']:
+                clean_text = strength.strip().lstrip('•').strip()
+                doc.add_paragraph(clean_text, style='List Bullet')
+        
+        # Areas for improvement
+        if comm_review.get('narrative_weaknesses'):
+            doc.add_heading('Areas for Improvement', level=3)
+            for weakness in comm_review['narrative_weaknesses']:
+                clean_text = weakness.strip().lstrip('•').strip()
+                doc.add_paragraph(clean_text, style='List Bullet')
+        
+        # Style recommendations
+        if comm_review.get('style_recommendations'):
+            doc.add_heading('Style Recommendations', level=3)
+            for rec in comm_review['style_recommendations']:
+                clean_text = rec.strip().lstrip('•').strip()
+                doc.add_paragraph(clean_text, style='List Bullet')
+    
+    # Add page break before the original document
+    doc.add_page_break()
+
 def output_commented_document(input_doc_path, document_review_items, output_doc_path, match_threshold=90, verbose=False):
     """Process the document and add AI review comments and suggestions."""
-    doc = docx.Document(input_doc_path)
+    # Create new document for output
+    doc = docx.Document()
+    
+    # Add high-level review if provided
+    if 'high_level_review' in document_review_items:
+        add_high_level_review(doc, document_review_items['high_level_review'])
+    
+    # Load and append original document
+    original_doc = docx.Document(input_doc_path)
+    for element in original_doc.element.body:
+        doc.element.body.append(element)
+    
     enable_track_changes(doc)
     
     print(f"Processing document with {len(doc.paragraphs)} paragraphs")
@@ -108,7 +186,7 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                     paragraph.add_run(before_match)
                 
                 # Add the matched text with comment and revision
-                if revision:
+                if revision and revision.strip():  # Only process revision if it has content
                     # Create deletion run and add comment to it
                     del_run = paragraph.add_run()
                     
@@ -146,9 +224,9 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                     ins_run._element.append(ins_element)
                     ins_element.append(ins_text)
                 else:
-                    # If no revision, just add the matched text with comment
+                    # Just add comment without revision
                     match_run = paragraph.add_run(match)
-                    match_run.add_comment(f"{comment} (Match confidence: {match_ratio}%)", author="AIPI", initials="AI")
+                    match_run.add_comment(comment, author="AIPI", initials="AI")
                 
                 # Add text after the match
                 if after_match:
@@ -160,7 +238,7 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
                 
                 print(f"Found match: '{match}' with confidence {match_ratio}%")
                 print(f"Added comment: '{comment}'")
-                if revision:
+                if revision and revision.strip():
                     print(f"Added revision: '{revision}'")
                     
             except Exception as e:
@@ -179,13 +257,7 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
     doc.save(output_doc_path)
 
 if __name__ == "__main__":
-    # Test data
-    # test_review_items = {
-    #     "match_strings": ["Maximizing the accuracy of material property", "The pelvis was constrained"],
-    #     "comments": ["This is a sample comment", "Another review comment"],
-    #     "revisions": ["suggested revision", "another suggestion"]
-    # }
-    
+    # Test data with high-level review
     test_review_items = {
         'match_strings': [
             'The current study will build upon our previously published work on pediatric patient-specific FE modeling and growth', 
@@ -201,16 +273,41 @@ if __name__ == "__main__":
             'Added context to clarify the significance of the current study.', 
             'Added reference and context to support the methodology.', 
             'Improved clarity and added reference to support the methodology.'
-        ]
+        ],
+        'high_level_review': {
+            'overall_assessment': 'This manuscript presents a novel approach to modeling scoliotic progression using finite element analysis. While the methodology is sound, there are several areas where additional validation and clarity would strengthen the scientific contribution.',
+            'key_strengths': [
+                'Innovative integration of growth modeling with FE analysis',
+                'Clear theoretical foundation based on established biomechanical principles',
+                'Practical clinical applications for predicting curve progression'
+            ],
+            'key_weaknesses': [
+                'Limited validation against clinical data',
+                'Assumptions in growth model need more justification',
+                'Statistical analysis of model accuracy could be more robust'
+            ],
+            'recommendations': [
+                'Include validation against a larger clinical dataset',
+                'Provide detailed sensitivity analysis for growth parameters',
+                'Add statistical confidence intervals for prediction accuracy',
+                'Clarify the clinical implications of the model\'s accuracy limits'
+            ],
+            'communication_review': {
+                'writing_assessment': "The paper presents complex ideas clearly, but lacks smooth transitions between sections. Technical concepts are well-explained for the target audience.",
+                'narrative_strengths': ["Clear problem statement", "Effective use of examples"],
+                'narrative_weaknesses': ["Section transitions need work", "Methods section assumes too much background knowledge"],
+                'style_recommendations': ["Add transition paragraphs between major sections", "Include more context for technical terms"]
+            }
+        }
     }
     
     # Test paths - adjust these to your actual file locations
-    input_path = "/home/christian/projects/agents/ai_pi/examples/ScolioticFEPaper_v7.docx"
-    output_path = "/home/christian/projects/agents/ai_pi/examples/test_output.docx"
+    input_path = "examples/ScolioticFEPaper_v7.docx"
+    output_path = "examples/test_output_with_review.docx"
     
     try:
-        output_commented_document(input_path, test_review_items, output_path)
-        print(f"Successfully created reviewed document at {output_path}")
+        output_commented_document(input_path, test_review_items, output_path, verbose=True)
+        print(f"Successfully created reviewed document with high-level summary at {output_path}")
     except Exception as e:
         print(f"Error processing document: {str(e)}")
 

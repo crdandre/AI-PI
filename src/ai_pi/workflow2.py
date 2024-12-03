@@ -89,6 +89,7 @@ class PaperReview:
         match_strings = []
         comments = []
         revisions = []
+        section_analyses = []  # Store analyses for final review
         
         total_sections = len(document_structure['section_summaries'])
         self.logger.info(f"Reviewing {total_sections} sections...")
@@ -124,6 +125,12 @@ class PaperReview:
                     match_strings.extend(current_matches)
                     comments.extend(current_comments)
                     revisions.extend(current_revisions)
+                    
+                    # Store section analysis for final review
+                    section_analyses.append({
+                        'section_type': section['section_title'],
+                        'analysis': review.get('scientific_analysis', {})
+                    })
                 else:
                     self.logger.warning(f"No review points found for section {i}")
                     
@@ -131,11 +138,19 @@ class PaperReview:
                 self.logger.error(f"Error reviewing section {i}: {str(e)}")
                 continue
         
-        # Create output structure
+        # Generate final high-level review
+        final_review = self.section_reviewer.compile_final_review(
+            section_analyses=section_analyses,
+            paper_context=document_structure['document_summary']
+        )
+        
+        # Create complete output structure
         review_output = {
             'match_strings': match_strings,
             'comments': comments,
-            'revisions': revisions
+            'revisions': revisions,
+            'high_level_review': final_review,  # Add synthesized review
+            'section_analyses': section_analyses  # Keep section-level analyses if needed
         }
         
         total_points = len(match_strings)
@@ -165,7 +180,7 @@ if __name__ == "__main__":
     
     # Example usage - using the same paths as document_output.py test    
     input_path = "examples/ScolioticFEPaper_v7.docx"
-    # input_path = "examples/example_abstract.docx"
+    input_path = "examples/example_abstract.docx"
     output_path = "examples/test_output_workflow2.docx"
 
     # Initialize both LLM types
