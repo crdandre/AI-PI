@@ -96,3 +96,5 @@ The idea is that this not only saves the PI time, but also allows for a more per
     - Should be able to tune a "threshold" for how much feedback to give (i.e. how perfectionist the reviewer is, to keep the focus on the highest prio points)
 - 12/2: Review quality is improving with CoT configs, considering using o1 as well. Working on doc formatting. Need to expand review process to hit style, clarity, and decisions about whether to comment, revise, both, or none for a given review point (but still comment and revise sufficiently - tune this propensity)
     - add [MegaParse](https://github.com/quivrhq/megaparse) ?
+    - need CoT/ReAct to actually show reasoning steps
+    - need to assess whether o1 works well with the arbitrary sections of the paper and whether this helps or hinders proper feedback? (or if using non-o1 is better here)
