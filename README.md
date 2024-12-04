@@ -98,3 +98,4 @@ The idea is that this not only saves the PI time, but also allows for a more per
     - add [MegaParse](https://github.com/quivrhq/megaparse) ?
     - need CoT/ReAct to actually show reasoning steps
     - need to assess whether o1 works well with the arbitrary sections of the paper and whether this helps or hinders proper feedback? (or if using non-o1 is better here)
+    - review sample database: [scrape openreview.net?](https://openreview.net/forum?id=2z4U9reLm9&referrer=%5Bthe%20profile%20of%20Subhashini%20Venugopalan%5D(%2Fprofile%3Fid%3D~Subhashini_Venugopalan2))
