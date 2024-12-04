@@ -14,10 +14,11 @@ from ai_pi.documents.document_ingestion import extract_document_history
 
 
 class PaperReview:
-    def __init__(self, llm=None, lm=None, verbose=False, log_dir="logs"):
+    def __init__(self, llm=None, lm=None, verbose=False, log_dir="logs", reviewer_class="Predict"):
         """Initialize with both LLM types:
         - llm: LlamaIndex LLM for context and summarizer
         - lm: DSPy LM for reviewer
+        - reviewer_class: Type of reviewer to use ("ReAct", "ChainOfThought", or "Predict")
         """
         if llm is None:
             raise ValueError("Must provide llm parameter for context and summarizer")
@@ -28,8 +29,12 @@ class PaperReview:
         self.context_agent = ContextAgent(llm, verbose=verbose)
         self.summarizer = PaperSummarizer(llm)
         
-        # DSPy component
-        self.section_reviewer = SectionReviewer(lm, verbose=verbose)
+        # DSPy component with reviewer_class parameter
+        self.section_reviewer = SectionReviewer(
+            engine=lm,
+            reviewer_class=reviewer_class,
+            verbose=verbose
+        )
         
         self.verbose = verbose
         
@@ -180,17 +185,25 @@ if __name__ == "__main__":
     
     # Example usage - using the same paths as document_output.py test    
     input_path = "examples/ScolioticFEPaper_v7.docx"
-    input_path = "examples/example_abstract.docx"
+    # input_path = "examples/example_abstract.docx"
     output_path = "examples/test_output_workflow2.docx"
 
     # Initialize both LLM types
-    llm = OpenAI(model="gpt-4o-mini")  # For context and summarizer
-    lm = dspy.LM('openai/gpt-4o-mini')  # For reviewer
+    llm = OpenAI(model="gpt-4o")  # For context and summarizer
+    # lm = dspy.LM('openai/gpt-4o-mini')  # For reviewer
+    lm = dspy.LM(
+        'openrouter/openai/o1-mini',
+        api_base="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        temperature=1.0,
+        max_tokens=9999
+    )
     
     paper_review = PaperReview(
         llm=llm,
         lm=lm,
-        verbose=True
+        verbose=True,
+        reviewer_class="Predict",
     )
     
     try:
