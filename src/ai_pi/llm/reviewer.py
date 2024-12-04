@@ -64,13 +64,16 @@ class FinalReviewSignature(dspy.Signature):
 class SectionReviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
     
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel], verbose=False):
+    def __init__(self, 
+                 engine: dspy.dsp.LM, 
+                 use_cot: bool = False,  # Add flag for ChainOfThought vs Predict
+                 verbose: bool = False):
         super().__init__()
         
-        # Instead of using examples in ChainOfThought initialization,
-        # we should use a prompt template or modify the signature
-        self.reviewer = dspy.ChainOfThought(ReviewerSignature)
-        self.final_reviewer = dspy.ChainOfThought(FinalReviewSignature)
+        # Choose between ChainOfThought and Predict based on flag
+        ReviewerClass = dspy.ChainOfThought if use_cot else dspy.Predict
+        self.reviewer = ReviewerClass(ReviewerSignature)
+        self.final_reviewer = ReviewerClass(FinalReviewSignature)
         
         # Add example as a class attribute if needed for reference
         self.example_input = {
@@ -301,12 +304,15 @@ class SectionReviewer(dspy.Module):
                     paper_context=paper_context
                 )
                 
-                # Ensure we have proper lists of strings
                 return {
                     'overall_assessment': str(final_review.overall_assessment),
                     'key_strengths': [str(s) for s in (final_review.key_strengths if isinstance(final_review.key_strengths, list) else [final_review.key_strengths])],
                     'key_weaknesses': [str(w) for w in (final_review.key_weaknesses if isinstance(final_review.key_weaknesses, list) else [final_review.key_weaknesses])],
-                    'recommendations': [str(r) for r in (final_review.recommendations if isinstance(final_review.recommendations, list) else [final_review.recommendations])]
+                    'recommendations': [str(r) for r in (final_review.recommendations if isinstance(final_review.recommendations, list) else [final_review.recommendations])],
+                    'model_info': {  # Add model information
+                        'engine': str(self.engine),
+                        'using_cot': isinstance(self.reviewer, dspy.ChainOfThought)
+                    }
                 }
         except Exception as e:
             logger.error(f"Error compiling final review: {str(e)}")
@@ -314,14 +320,27 @@ class SectionReviewer(dspy.Module):
                 'overall_assessment': "Error generating final review",
                 'key_strengths': [],
                 'key_weaknesses': [],
-                'recommendations': []
+                'recommendations': [],
+                'model_info': {
+                    'engine': str(self.engine),
+                    'using_cot': isinstance(self.reviewer, dspy.ChainOfThought)
+                }
             }
 
 
 if __name__ == "__main__":
+    import os
     # Test the reviewer with DSPy's LM directly
-    lm = dspy.LM('openai/gpt-4o-mini')
-    reviewer = SectionReviewer(lm)
+    # lm = dspy.LM('openai/gpt-4o-mini')
+    lm = dspy.LM(
+        'openrouter/qwen/qwq-32b-preview',
+        api_base="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        temperature=0.7,
+    )
+    reviewer = SectionReviewer(
+        lm
+    )
     
     test_context = {
         'paper_summary': 'Test paper about scoliosis modeling.'
