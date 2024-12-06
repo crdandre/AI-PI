@@ -8,6 +8,8 @@ import {
   Text,
   Container,
   useToast,
+  Checkbox,
+  Heading,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { CheckIcon } from '@chakra-ui/icons';
@@ -26,6 +28,7 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
   const [uploadedFileId, setUploadedFileId] = useState(null);
   const [processingStatus, setProcessingStatus] = useState('');
   const [apiConnected, setApiConnected] = useState(false);
+  const [testMode, setTestMode] = useState(false);
   const toast = useToast();
 
   // Check API connection on component mount
@@ -144,8 +147,9 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
     setProcessingStatus('Processing document...');
 
     try {
+      const endpoint = testMode ? 'processing_test' : 'process';
       const response = await axios.post(
-        `${apiUrl}/api/process`,
+        `${apiUrl}/api/${endpoint}`,
         {
           fileId: uploadedFileId,
           model: model
@@ -153,7 +157,6 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
       );
 
       setIsComplete(true);
-      // Pass both the review data and fileId to the parent
       onDocumentProcessed({
         ...response.data,
         fileId: uploadedFileId
@@ -203,9 +206,25 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
   return (
     <Container maxW="container.md" py={8}>
       <VStack spacing={6} align="stretch">
-        <Text fontSize="2xl" fontWeight="bold" textAlign="center">
-          AI-PI Document Review
-        </Text>
+        <Box 
+          p={8} 
+          bg="white" 
+          boxShadow="xl" 
+          borderRadius="md" 
+          borderWidth="1px" 
+          borderColor="cambridge.blue"
+        >
+          <Heading 
+            as="h3" 
+            fontSize="xl" 
+            fontFamily="Crimson Text, Georgia, serif" 
+            color="cambridge.darkBlue" 
+            textAlign="center" 
+            mb={6}
+          >
+            Document Submission Portal
+          </Heading>
+        </Box>
 
         {!apiConnected && (
           <Box p={4} bg="red.100" color="red.700" borderRadius="md">
@@ -237,6 +256,13 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
           <option value="gpt-4o-mini">4o Mini</option>
           <option value="o1-mini">o1 Mini</option>
         </Select>
+
+        <Checkbox 
+          isChecked={testMode} 
+          onChange={(e) => setTestMode(e.target.checked)}
+        >
+          Test Mode (Skip Processing)
+        </Checkbox>
 
         <Button
           colorScheme={file ? "red" : "blue"}

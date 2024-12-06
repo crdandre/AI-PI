@@ -1,24 +1,46 @@
-import { ChakraProvider, CSSReset, Container, VStack } from '@chakra-ui/react';
-import { DocumentUpload } from './components/DocumentUpload';
-import { DocumentViewer } from './components/DocumentViewer';
+import { ChakraProvider, CSSReset, Container, VStack, HStack, Checkbox, Spacer } from '@chakra-ui/react';
+import { OfficeScene } from './components/OfficeScene';
+import { DocumentDownloader } from './components/DocumentDownload';
 import { useState } from 'react';
+import theme from './theme';
 
 function App() {
   const [reviewData, setReviewData] = useState(null);
-  const [fileId, setFileId] = useState(null);
+  const [isTestMode, setIsTestMode] = useState(false);
 
   const handleDocumentProcessed = (data) => {
+    if (!data || !data.fileId) {
+      console.error('Invalid document data received:', data);
+      return;
+    }
     setReviewData(data);
-    setFileId(data.fileId);
   };
 
   return (
-    <ChakraProvider>
+    <ChakraProvider theme={theme}>
       <CSSReset />
-      <Container maxW="container.xl" py={8}>
+      <Container maxW="container.xl" py={12}>
         <VStack spacing={8} align="stretch">
-          <DocumentUpload onDocumentProcessed={handleDocumentProcessed} />
-          {reviewData && <DocumentViewer reviewData={reviewData} fileId={fileId} />}
+          <HStack>
+            <Spacer />
+            <Checkbox 
+              isChecked={isTestMode}
+              onChange={(e) => setIsTestMode(e.target.checked)}
+              colorScheme="blue"
+            >
+              Test Mode
+            </Checkbox>
+          </HStack>
+          <OfficeScene 
+            onDocumentProcessed={handleDocumentProcessed} 
+            isTestMode={isTestMode}
+          />
+          {reviewData && (
+            <DocumentDownloader 
+              reviewData={reviewData} 
+              fileId={reviewData.fileId} 
+            />
+          )}
         </VStack>
       </Container>
     </ChakraProvider>

@@ -98,6 +98,42 @@ async def process_document(request: Dict[str, str]):
         uploaded_files[file_id]["error"] = str(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/processing_test")
+async def process_document_test(request: Dict[str, str]):
+    file_id = request.get("fileId")
+    
+    if not file_id or file_id not in uploaded_files:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file_info = uploaded_files[file_id]
+    original_filename = file_info["original_filename"]
+    
+    try:
+        # Find most recent reviewed file
+        temp_dir = "temp"
+        reviewed_files = [f for f in os.listdir(temp_dir) if f.startswith("reviewed_")]
+        if not reviewed_files:
+            raise HTTPException(status_code=404, detail="No reviewed files found for testing")
+        
+        # Sort by modification time, newest first
+        reviewed_files.sort(key=lambda x: os.path.getmtime(os.path.join(temp_dir, x)), reverse=True)
+        latest_reviewed = reviewed_files[0]
+        
+        # Update file info
+        output_path = os.path.join(temp_dir, latest_reviewed)
+        uploaded_files[file_id]["output_path"] = output_path
+        uploaded_files[file_id]["status"] = "processed"
+        
+        return {
+            "fileId": file_id,
+            "status": "processed",
+            "filename": f"reviewed_{original_filename}"
+        }
+    except Exception as e:
+        uploaded_files[file_id]["status"] = "error"
+        uploaded_files[file_id]["error"] = str(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/documents/{file_id}")
 async def get_document(file_id: str):
     if file_id not in uploaded_files:
