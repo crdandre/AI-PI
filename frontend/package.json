@@ -14,10 +14,18 @@
     "@chakra-ui/react": "^2.10.4",
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
+    "@nativedocuments/docx-wasm": "^2.2.13-1561490777",
+    "@react-pdf-viewer/core": "^3.12.0",
     "axios": "^1.7.9",
+    "docx": "^9.1.0",
+    "docxtemplater": "^3.55.3",
     "framer-motion": "^6.5.1",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.8.0",
+    "pizzip": "^3.1.7",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

@@ -97,5 +97,6 @@ The idea is that this not only saves the PI time, but also allows for a more per
 - 12/2: Review quality is improving with CoT configs, considering using o1 as well. Working on doc formatting. Need to expand review process to hit style, clarity, and decisions about whether to comment, revise, both, or none for a given review point (but still comment and revise sufficiently - tune this propensity)
     - add [MegaParse](https://github.com/quivrhq/megaparse) ?
     - need CoT/ReAct to actually show reasoning steps
+        - use Storm's role+dialogue based approach and dspy implementations to create depth of reasoning
     - need to assess whether o1 works well with the arbitrary sections of the paper and whether this helps or hinders proper feedback? (or if using non-o1 is better here)
     - review sample database: [scrape openreview.net?](https://openreview.net/forum?id=2z4U9reLm9&referrer=%5Bthe%20profile%20of%20Subhashini%20Venugopalan%5D(%2Fprofile%3Fid%3D~Subhashini_Venugopalan2))

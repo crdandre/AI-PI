@@ -16,12 +16,14 @@ const apiHost = 'localhost';
 const apiPort = 8001;
 const apiUrl = `http://${apiHost}:${apiPort}`;
 
-export const DocumentUpload = () => {
+export const DocumentUpload = ({ onDocumentProcessed }) => {
   const [file, setFile] = useState(null);
   const [model, setModel] = useState('gpt-4o-mini');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [uploadedFileId, setUploadedFileId] = useState(null);
   const [processingStatus, setProcessingStatus] = useState('');
   const [apiConnected, setApiConnected] = useState(false);
   const toast = useToast();
@@ -89,99 +91,113 @@ export const DocumentUpload = () => {
     return () => clearInterval(interval);
   }, [toast]);
 
-  const handleUpload = async () => {
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('model', model);
-
-    setIsLoading(true);
-    setUploadProgress(0);
-    setIsComplete(false);
-    setProcessingStatus('Uploading file...');
-    
+  const handleUpload = async (file) => {
+    setIsUploading(true);
     try {
-      const response = await axios.post(`${apiUrl}/api/review`, formData, {
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = (progressEvent.loaded / progressEvent.total) * 100;
-            setUploadProgress(progress);
-            if (progress === 100) {
-              setProcessingStatus('Processing document...');
-            }
-          } else {
-            setProcessingStatus('Uploading file... (size unknown)');
-          }
-        },
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const formData = new FormData();
+      formData.append('file', file);
+
+      console.log('Uploading file...', file.name);
+      const uploadResponse = await fetch(`${apiUrl}/api/upload`, {
+        method: 'POST',
+        body: formData,
       });
 
-      // If we get here, the request was successful
-      const blob = new Blob([response.data]);
-      
-      // Create download link for processed document
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `reviewed_${file.name}`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(`Upload failed: ${errorData.detail}`);
+      }
 
-      setIsComplete(true);
+      const uploadData = await uploadResponse.json();
+      console.log('Upload response:', uploadData);
+
+      if (!uploadData.fileId) {
+        throw new Error('No fileId received from server');
+      }
+
+      setUploadedFileId(uploadData.fileId);
       toast({
-        title: 'Success',
-        description: 'Document processed successfully',
+        title: 'Upload Successful',
+        description: `${file.name} has been uploaded successfully`,
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
     } catch (error) {
       console.error('Upload error:', error);
-      
-      // Improved error handling
-      let errorMessage = 'Failed to process document';
-      
-      if (error.response) {
-        // The server responded with an error
-        if (error.response.data instanceof Blob) {
-          // If the error response is a blob, read it
-          const text = await error.response.data.text();
-          try {
-            const errorData = JSON.parse(text);
-            errorMessage = errorData.detail || errorData.message || text;
-          } catch {
-            errorMessage = text;
-          }
-        } else {
-          // Regular JSON error response
-          errorMessage = error.response.data?.detail || 
-                        error.response.data?.message || 
-                        `Server error: ${error.response.status}`;
-        }
-      } else if (error.request) {
-        // The request was made but no response was received
-        errorMessage = 'No response received from server';
-      } else {
-        // Something happened in setting up the request
-        errorMessage = error.message;
-      }
+      handleError(error, 'Failed to upload document');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
+  const clearUpload = () => {
+    setFile(null);
+    setUploadedFileId(null);
+    setIsComplete(false);
+  };
+
+  const handleProcess = async () => {
+    if (!uploadedFileId) return;
+
+    setIsProcessing(true);
+    setProcessingStatus('Processing document...');
+
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/process`,
+        {
+          fileId: uploadedFileId,
+          model: model
+        }
+      );
+
+      setIsComplete(true);
+      // Pass both the review data and fileId to the parent
+      onDocumentProcessed({
+        ...response.data,
+        fileId: uploadedFileId
       });
+    } catch (error) {
+      handleError(error, 'Failed to process document');
     } finally {
       setProcessingStatus('');
-      setIsLoading(false);
+      setIsProcessing(false);
     }
+  };
+
+  const handleError = async (error, defaultMessage) => {
+    console.error('Operation error:', error);
+    
+    let errorMessage = defaultMessage;
+    
+    if (error.response) {
+      if (error.response.data instanceof Blob) {
+        const text = await error.response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.detail || errorData.message || text;
+        } catch {
+          errorMessage = text;
+        }
+      } else {
+        errorMessage = error.response.data?.detail || 
+                      error.response.data?.message || 
+                      `Server error: ${error.response.status}`;
+      }
+    } else if (error.request) {
+      errorMessage = 'No response received from server';
+    } else {
+      errorMessage = error.message;
+    }
+
+    toast({
+      title: 'Error',
+      description: errorMessage,
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
   };
 
   return (
@@ -193,7 +209,7 @@ export const DocumentUpload = () => {
 
         {!apiConnected && (
           <Box p={4} bg="red.100" color="red.700" borderRadius="md">
-            ⚠️ API server is not connected. Please ensure it is running on port 8000.
+            API server is not connected. Please ensure it is running on port 8000.
           </Box>
         )}
         
@@ -201,9 +217,20 @@ export const DocumentUpload = () => {
           <input
             type="file"
             accept=".docx"
-            onChange={(e) => setFile(e.target.files?.[0])}
+            onChange={(e) => {
+              const selectedFile = e.target.files?.[0];
+              if (selectedFile) {
+                setFile(selectedFile);
+                handleUpload(selectedFile);
+              }
+            }}
             style={{ width: '100%' }}
           />
+          {file && (
+            <Text mt={2} color="green.500">
+              Selected file: {file.name}
+            </Text>
+          )}
         </Box>
 
         <Select value={model} onChange={(e) => setModel(e.target.value)}>
@@ -212,24 +239,36 @@ export const DocumentUpload = () => {
         </Select>
 
         <Button
-          colorScheme="blue"
-          onClick={handleUpload}
-          isLoading={isLoading}
-          disabled={!file || !apiConnected}
+          colorScheme={file ? "red" : "blue"}
+          onClick={() => file ? clearUpload() : null}
+          isLoading={isUploading}
+          disabled={!apiConnected}
           size="lg"
         >
-          {!apiConnected ? 'API Not Connected' : 'Process Document'}
+          {!apiConnected ? 'API Not Connected' : (file ? 'Clear Upload' : 'Upload Document')}
         </Button>
 
-        {isLoading && (
+        <Button
+          colorScheme="green"
+          onClick={handleProcess}
+          isLoading={isProcessing}
+          disabled={!uploadedFileId || isUploading}
+          size="lg"
+        >
+          Process Document
+        </Button>
+
+        {(isUploading || isProcessing) && (
           <Box>
-            <Progress 
-              size="xs" 
-              value={uploadProgress} 
-              colorScheme="blue"
-              hasStripe
-              isAnimated
-            />
+            {isUploading && (
+              <Progress 
+                size="xs" 
+                value={uploadProgress} 
+                colorScheme="blue"
+                hasStripe
+                isAnimated
+              />
+            )}
             <Text mt={2} textAlign="center">
               {processingStatus}
               {processingStatus === 'Uploading file...' && ` ${Math.round(uploadProgress)}%`}
@@ -237,7 +276,7 @@ export const DocumentUpload = () => {
           </Box>
         )}
 
-        {isComplete && !isLoading && (
+        {isComplete && !isUploading && !isProcessing && (
           <Box textAlign="center" color="green.500">
             <CheckIcon w={6} h={6} />
             <Text>Processing complete! Download should start automatically.</Text>
@@ -246,4 +285,5 @@ export const DocumentUpload = () => {
       </VStack>
     </Container>
   );
+  
 };
