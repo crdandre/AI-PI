@@ -112,32 +112,39 @@ class PaperReview:
                 review = self.section_reviewer.review_section(
                     section_text=section['original_text'],
                     section_type=section['section_title'],
-                    paper_context=paper_context  # Now using plain string data
+                    paper_context=paper_context
                 )
                 
                 self.logger.debug(f"Full review response: {review}")
                 section_reviews.append(review)
                 
-                # Fix: Extract review data directly from the review response
+                # Extract review data and add validation logging
                 if review:
                     current_matches = review.get('match_strings', [])
                     current_comments = review.get('comments', [])
                     current_revisions = review.get('revisions', [])
                     
                     self.logger.info(f"Found {len(current_matches)} review points in section {i}")
-                    self.logger.debug(f"Review points: {review}")
+                    # Add logging for section-specific validation
+                    self.logger.debug(f"Section type: {section['section_title']}")
+                    self.logger.debug(f"Initial analysis: {review.get('initial_analysis', 'N/A')}")
+                    self.logger.debug(f"Reflection: {review.get('reflection', 'N/A')}")
                     
                     match_strings.extend(current_matches)
                     comments.extend(current_comments)
                     revisions.extend(current_revisions)
                     
-                    # Store section analysis for final review
+                    # Store enhanced section analysis for final review
                     section_analyses.append({
                         'section_type': section['section_title'],
-                        'analysis': review.get('scientific_analysis', {})
+                        'analysis': {
+                            'initial_analysis': review.get('initial_analysis', ''),
+                            'reflection': review.get('reflection', ''),
+                            'review_items': list(zip(current_matches, current_comments, current_revisions))
+                        }
                     })
                 else:
-                    self.logger.warning(f"No review points found for section {i}")
+                    self.logger.warning(f"No review points found for section {i} - validation may have failed")
                     
             except Exception as e:
                 self.logger.error(f"Error reviewing section {i}: {str(e)}")
