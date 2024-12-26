@@ -192,12 +192,18 @@ class SectionReviewer(dspy.Module):
             }
         }
 
-    def review_section(self, section_text: str, section_type: str, paper_context: dict) -> dict:
+    def review_section(self, section_text: str, section_type: str, paper_context: dict | str) -> dict:
         """Main entry point for reviewing sections."""
         try:
             if self.verbose:
                 print(f"Reviewing {section_type} section...")
             
+            # Convert string context to dict if needed
+            if isinstance(paper_context, str):
+                paper_context = {'paper_summary': paper_context}
+            elif not isinstance(paper_context, dict):
+                paper_context = {'paper_summary': ''}
+
             result = self.forward(section_text, section_type, paper_context)
             return result.review if hasattr(result, 'review') else self._create_empty_review()['review']
                 

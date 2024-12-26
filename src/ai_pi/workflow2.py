@@ -71,140 +71,157 @@ class PaperReview:
         self.logger.info(f"Starting review of document: {input_doc_path}")
         self.logger.debug(f"Full processing path: {input_doc_path}")
         
-        # Use document_ingestion to properly extract text content
+        # Use document_ingestion to properly extract text content and sections
         try:
-            paper_text = extract_document_history(input_doc_path)
+            # Pass the DSPy LM to document ingestion
+            document_history = extract_document_history(
+                input_doc_path,
+                lm=self.section_reviewer.engine  # Use the same LLM as the reviewer
+            )
             self.logger.debug(f"Successfully extracted text content")
+            self.logger.debug(f"Document history type: {type(document_history)}")
+            self.logger.debug(f"Document history keys: {document_history.keys() if isinstance(document_history, dict) else 'Not a dict'}")
         except Exception as e:
-            error_msg = f"Failed to process document: {str(e)}"
+            error_msg = f"Failed to process document: {str(e)}\nType: {type(e)}\nFull error: {repr(e)}"
             self.logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # Use input path directly
-        doc_path = input_doc_path
-        self.logger.debug(f"Using document path: {doc_path}")
-        
-        # 1. Use ContextAgent to identify sections and create structure
-        self.logger.info("Analyzing document structure...")
-        document_structure = self.context_agent.analyze_document(paper_text)
-        self.logger.debug(f"Document structure: {document_structure}")
-        
-        # 2. Review each section using the existing document structure
-        section_reviews = []
-        match_strings = []
-        comments = []
-        revisions = []
-        section_analyses = []  # Store analyses for final review
-        
-        total_sections = len(document_structure['section_summaries'])
-        self.logger.info(f"Reviewing {total_sections} sections...")
-        
-        for i, section in enumerate(document_structure['section_summaries'], 1):
-            self.logger.info(f"Reviewing section {i}/{total_sections}: {section['section_title']}")
-            self.logger.debug(f"Full section content: {section['original_text'][:200]}...")
+        try:
+            # Use input path directly
+            doc_path = input_doc_path
+            self.logger.debug(f"Using document path: {doc_path}")
             
-            try:
-                # Convert LlamaIndex response to plain string
-                paper_context = {
-                    'paper_summary': str(document_structure['document_summary']['document_analysis'].text)
-                }
+            # 1. Use ContextAgent to identify sections and create structure
+            self.logger.info("Analyzing document structure...")
+            if not isinstance(document_history, dict) or 'sections' not in document_history:
+                raise ValueError(f"Invalid document_history format: {type(document_history)}")
+            
+            document_structure = self.context_agent.analyze_document(document_history['sections'])
+            self.logger.debug(f"Document structure type: {type(document_structure)}")
+            self.logger.debug(f"Document structure keys: {document_structure.keys() if isinstance(document_structure, dict) else 'Not a dict'}")
+            
+            # Now we can use the sections directly from document_history
+            sections = document_history['sections']
+            self.logger.debug(f"Number of sections found: {len(sections)}")
+            self.logger.debug(f"Section types: {[s.get('type', 'unknown') for s in sections]}")
+            
+            section_reviews = []
+            match_strings = []
+            comments = []
+            revisions = []
+            section_analyses = []
+            
+            total_sections = len(sections)
+            self.logger.info(f"Reviewing {total_sections} identified sections...")
+            
+            for i, section in enumerate(sections, 1):
+                self.logger.info(f"Reviewing section {i}/{total_sections}: {section['type']}")
                 
-                review = self.section_reviewer.review_section(
-                    section_text=section['original_text'],
-                    section_type=section['section_title'],
-                    paper_context=paper_context
-                )
-                
-                self.logger.debug(f"Full review response: {review}")
-                section_reviews.append(review)
-                
-                # Extract review data and add validation logging
-                if review:
-                    current_matches = review.get('match_strings', [])
-                    current_comments = review.get('comments', [])
-                    current_revisions = review.get('revisions', [])
+                try:
+                    paper_context = {
+                        'paper_summary': str(document_structure['document_summary']['document_analysis'].text),
+                        'section_type': section['type']  # Now we have confident section types
+                    }
                     
-                    self.logger.info(f"Found {len(current_matches)} review points in section {i}")
-                    # Add logging for section-specific validation
-                    self.logger.debug(f"Section type: {section['section_title']}")
-                    self.logger.debug(f"Initial analysis: {review.get('initial_analysis', 'N/A')}")
-                    self.logger.debug(f"Reflection: {review.get('reflection', 'N/A')}")
+                    review = self.section_reviewer.review_section(
+                        section_text=section['text'],
+                        section_type=section['type'],
+                        paper_context=paper_context
+                    )
                     
-                    match_strings.extend(current_matches)
-                    comments.extend(current_comments)
-                    revisions.extend(current_revisions)
+                    self.logger.debug(f"Full review response: {review}")
+                    section_reviews.append(review)
                     
-                    # Store enhanced section analysis for final review
-                    section_analyses.append({
-                        'section_type': section['section_title'],
-                        'analysis': {
-                            'initial_analysis': review.get('initial_analysis', ''),
-                            'reflection': review.get('reflection', ''),
-                            'review_items': list(zip(current_matches, current_comments, current_revisions))
-                        }
-                    })
-                else:
-                    self.logger.warning(f"No review points found for section {i} - validation may have failed")
-                    
-            except Exception as e:
-                self.logger.error(f"Error reviewing section {i}: {str(e)}")
-                continue
-        
-        # Generate final high-level review
-        final_review = self.section_reviewer.compile_final_review(
-            section_analyses=section_analyses,
-            paper_context=document_structure['document_summary']
-        )
-        
-        # Create complete output structure
-        review_output = {
-            'match_strings': match_strings,
-            'comments': comments,
-            'revisions': revisions,
-            'high_level_review': final_review,  # Add synthesized review
-            'section_analyses': section_analyses  # Keep section-level analyses if needed
-        }
-        
-        total_points = len(match_strings)
-        self.logger.info(f"Review complete: {total_points} total review points generated")
-        self.logger.debug(f"Full review output: {review_output}")
-        
-        # Generate output document if path provided
-        if output_path:
-            self.logger.info(f"Generating reviewed document at: {output_path}")
-            output_commented_document(
-                input_doc_path=doc_path,
-                document_review_items=review_output,
-                output_doc_path=output_path
+                    # Extract review data and add validation logging
+                    if review:
+                        current_matches = review.get('match_strings', [])
+                        current_comments = review.get('comments', [])
+                        current_revisions = review.get('revisions', [])
+                        
+                        self.logger.info(f"Found {len(current_matches)} review points in section {i}")
+                        # Add logging for section-specific validation
+                        self.logger.debug(f"Section type: {section['type']}")
+                        self.logger.debug(f"Initial analysis: {review.get('initial_analysis', 'N/A')}")
+                        self.logger.debug(f"Reflection: {review.get('reflection', 'N/A')}")
+                        
+                        match_strings.extend(current_matches)
+                        comments.extend(current_comments)
+                        revisions.extend(current_revisions)
+                        
+                        # Store enhanced section analysis for final review
+                        section_analyses.append({
+                            'section_type': section['type'],
+                            'analysis': {
+                                'initial_analysis': review.get('initial_analysis', ''),
+                                'reflection': review.get('reflection', ''),
+                                'review_items': list(zip(current_matches, current_comments, current_revisions))
+                            }
+                        })
+                    else:
+                        self.logger.warning(f"No review points found for section {i} - validation may have failed")
+                        
+                except Exception as e:
+                    self.logger.error(f"Error reviewing section {i}: {str(e)}")
+                    continue
+            
+            # Generate final high-level review
+            final_review = self.section_reviewer.compile_final_review(
+                section_analyses=section_analyses,
+                paper_context=document_structure['document_summary']
             )
-            self.logger.debug("Document generation complete")
-        
-        return {
-            'paper_context': document_structure['document_summary'],
-            'section_reviews': section_reviews,
-            'document_structure': document_structure,
-            'review_output': review_output
-        }
+            
+            # Create complete output structure
+            review_output = {
+                'match_strings': match_strings,
+                'comments': comments,
+                'revisions': revisions,
+                'high_level_review': final_review,  # Add synthesized review
+                'section_analyses': section_analyses  # Keep section-level analyses if needed
+            }
+            
+            total_points = len(match_strings)
+            self.logger.info(f"Review complete: {total_points} total review points generated")
+            self.logger.debug(f"Full review output: {review_output}")
+            
+            # Generate output document if path provided
+            if output_path:
+                self.logger.info(f"Generating reviewed document at: {output_path}")
+                output_commented_document(
+                    input_doc_path=doc_path,
+                    document_review_items=review_output,
+                    output_doc_path=output_path
+                )
+                self.logger.debug("Document generation complete")
+            
+            return {
+                'paper_context': document_structure['document_summary'],
+                'section_reviews': section_reviews,
+                'document_structure': document_structure,
+                'review_output': review_output
+            }
+        except Exception as e:
+            self.logger.error(f"Error processing document: {str(e)}")
+            raise ValueError(f"Error processing document: {str(e)}")
 
 
 if __name__ == "__main__":
     from llama_index.llms.openai import OpenAI
     
     # Example usage - using the same paths as document_output.py test    
-    input_path = "examples/ScolioticFEPaper_v7.docx"
-    # input_path = "examples/example_abstract.docx"
+    # input_path = "examples/ScolioticFEPaper_v7.docx"
+    input_path = "examples/example_abstract.docx"
     output_path = "examples/test_output_workflow2.docx"
 
     # Initialize both LLM types
-    llm = OpenAI(model="gpt-4o")  # For context and summarizer
-    # lm = dspy.LM('openai/gpt-4o-mini')  # For reviewer
-    lm = dspy.LM(
-        'openrouter/openai/o1-mini',
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=1.0,
-        max_tokens=9999
-    )
+    llm = OpenAI(model="gpt-4o-mini")  # For context and summarizer
+    lm = dspy.LM('openai/gpt-4o-mini')  # For reviewer
+    # lm = dspy.LM(
+    #     'openrouter/openai/o1-mini',
+    #     api_base="https://openrouter.ai/api/v1",
+    #     api_key=os.getenv("OPENROUTER_API_KEY"),
+    #     temperature=1.0,
+    #     max_tokens=9999
+    # )
     
     paper_review = PaperReview(
         llm=llm,

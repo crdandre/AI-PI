@@ -23,6 +23,7 @@ dependencies = [
     "llama-index-readers-file",
     "llama-index-llms-nvidia", 
     "llama-index-llms-openai",
+    "llama-index-llms-ollama",
     "llama-index-llms-openrouter",
     "llama-index-embeddings-nvidia",
     "llama-index-postprocessor-nvidia-rerank",

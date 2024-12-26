@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, TypedDict, Union
 import os
 from pathlib import Path
 import re
+from .section_identifier import SectionIdentifier
+import dspy
 
 class Revision(TypedDict):
     id: str
@@ -152,12 +154,13 @@ def clean_citations(text: str) -> str:
     
     return text.strip()
 
-def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
+def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False) -> Union[Dict, str]:
     """
     Extract document history and format as text, optionally saving to file.
     
     Args:
         file_path: Path to the Word document
+        lm: Language model for section identification
         write_to_file: Whether to write the processed content to a file (default: False)
     
     Returns:
@@ -317,7 +320,14 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         document_history['metadata']['comment_count'] = len(document_history['comments'])
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
-        # Format the content
+        # After extracting full_text, identify sections
+        section_identifier = SectionIdentifier(engine=lm)
+        sections = section_identifier.process_document(full_text)
+        
+        # Add sections to document_history
+        document_history['sections'] = sections
+        
+        # Update formatting to include section information
         formatted_text = []
         formatted_text.append("=== DOCUMENT METADATA ===")
         formatted_text.append(f"Document ID: {document_history['document_id']}")
@@ -339,6 +349,11 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             for revision in document_history['revisions']:
                 formatted_text.append(prepare_revision_text(revision))
                 formatted_text.append("\n")
+        
+        formatted_text.append("=== DOCUMENT SECTIONS ===")
+        for section in sections:
+            formatted_text.append(f"\n=== {section['type'].upper()} ===")
+            formatted_text.append(section['text'])
         
         formatted_text = "\n".join(formatted_text)
         
