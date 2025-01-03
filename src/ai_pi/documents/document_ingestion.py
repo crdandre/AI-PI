@@ -7,15 +7,12 @@ changes would be needed to index the references and format them with appropriate
 context.
 """
 
-from docx import Document
 from lxml import etree
 import zipfile
-from datetime import datetime
 from typing import Dict, List, Optional, TypedDict, Union
-import os
 from pathlib import Path
 import re
-from .section_identifier import SectionIdentifier
+from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
 import dspy
 
 class Revision(TypedDict):
@@ -139,16 +136,12 @@ def clean_citations(text: str) -> str:
     # Remove the References section and everything after it
     if 'References' in text:
         text = text.split('References')[0]
-    
     # Remove parenthetical citations like (Smith et al., 2020)
     text = re.sub(r'\([^()]*?\d{4}[^()]*?\)', '', text)
-    
     # Remove numbered citations like [1] or [1,2,3]
     text = re.sub(r'\[\d+(?:,\s*\d+)*\]', '', text)
-    
     # Remove multiple spaces created by citation removal
     text = re.sub(r'\s+', ' ', text)
-    
     # Fix spacing around punctuation
     text = re.sub(r'\s+([.,;:])', r'\1', text)
     
@@ -174,12 +167,46 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         tree = etree.fromstring(document_xml)
         namespace = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
-        # Build full document text first
+        # Build full text with formatting
         full_text = []
+        current_formatting = {}
+        
         for element in tree.iter():
-            if element.tag == f'{{{namespace["w"]}}}t':
-                full_text.append(element.text if element.text else '')
+            if element.tag == f'{{{namespace["w"]}}}p':  # Paragraph
+                # Check if this is a heading
+                style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
+                if style_element is not None:
+                    style = style_element.get(f'{{{namespace["w"]}}}val')
+                    if style == 'Heading1':  # Only preserve Heading1
+                        current_formatting['heading'] = 1
+                        full_text.append(f"\n# ")  # Markdown-style heading
+                    else:
+                        current_formatting.pop('heading', None)
+                else:
+                    current_formatting.pop('heading', None)
+                    full_text.append('\n')  # New paragraph
+                    
+            elif element.tag == f'{{{namespace["w"]}}}r':  # Run
+                # Check for text formatting
+                rPr = element.find(f'.//{{{namespace["w"]}}}rPr', namespace)
+                if rPr is not None:
+                    if rPr.find(f'.//{{{namespace["w"]}}}b', namespace) is not None:
+                        current_formatting['bold'] = True
+                    if rPr.find(f'.//{{{namespace["w"]}}}i', namespace) is not None:
+                        current_formatting['italic'] = True
+                
+            elif element.tag == f'{{{namespace["w"]}}}t':  # Text
+                text = element.text if element.text else ''
+                if current_formatting.get('bold'):
+                    text = f"**{text}**"
+                if current_formatting.get('italic'):
+                    text = f"*{text}*"
+                full_text.append(text)
+                current_formatting = {}  # Reset formatting after applying
+        
         full_text = ''.join(full_text)
+        # Remove multiple newlines
+        full_text = re.sub(r'\n{3,}', '\n\n', full_text)
         
         # Clean citations from the full text
         full_text = clean_citations(full_text)
@@ -321,10 +348,16 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
         # After extracting full_text, identify sections
-        section_identifier = SectionIdentifier(engine=lm)
+        section_identifier = SingleContextSectionIdentifier(engine=lm)
         sections = section_identifier.process_document(full_text)
         
-        # Add sections to document_history
+        # Add the actual text to each section
+        for section in sections:
+            start_match = section['match_strings']['start']
+            end_match = section['match_strings']['end']
+            section['text'] = extract_section_text(full_text, start_match, end_match)
+        
+        # # Add sections to document_history
         document_history['sections'] = sections
         
         # Update formatting to include section information
@@ -364,21 +397,46 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             
             # Generate base filename from input file
             base_filename = Path(file_path).stem
+            output_file = output_dir / f"{base_filename}_processed.txt"
             
             # Write formatted text to file
-            with open(output_dir / f"{base_filename}_processed.txt", 'w', encoding='utf-8') as f:
+            with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(formatted_text)
             
+            print(f"File written to: {output_file.absolute()}")
             return document_history
         
         return formatted_text
     
 
+def extract_section_text(full_text: str, start_match: str, end_match: str) -> str:
+    """Helper function to extract text between start and end match strings."""
+    try:
+        start_idx = full_text.index(start_match)
+        end_idx = full_text.index(end_match) + len(end_match)
+        return full_text[start_idx:end_idx].strip()
+    except ValueError:
+        return ""
+
 #Testing Usage
 if __name__ == "__main__":
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=True)
+    import os, json
+    
+    openrouter_model = 'openrouter/openai/gpt-4o'
+    
+    # Initialize and run
+    lm = dspy.LM(
+        openrouter_model,
+        api_base="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        temperature=0.01,
+    )
+    
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=True, lm=lm)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
-    processed_file = output_dir / f"ScolioticFEPaper_v7_processed.txt"
+    processed_file = output_dir / f"ScolioticFEPaper_v7_processed2.txt"
     print(f"\nProcessed file saved as: {processed_file.absolute()}")
+    
+    print(json.dumps(document_history, indent=4))
