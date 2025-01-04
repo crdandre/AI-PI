@@ -22,6 +22,10 @@ This design of this framework was inspired primarily by [STORM](https://github.c
 - Start API : `uvicorn src.ai_pi.main:app --reload --host localhost --port 8001`
 - Start Frontend: `cd frontend && npm run dev`
 
+## Design
+
+## Demonstration
+
 
 
 

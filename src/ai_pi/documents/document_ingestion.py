@@ -14,7 +14,11 @@ from pathlib import Path
 import re
 from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
 import dspy
-import json
+import io
+from PIL import Image
+from datetime import datetime
+import os
+
 
 class Revision(TypedDict):
     id: str
@@ -27,6 +31,7 @@ class Revision(TypedDict):
     parent_id: Optional[str]
     formatting: Optional[Dict]
 
+
 class Comment(TypedDict):
     id: str
     text: str
@@ -37,6 +42,22 @@ class Comment(TypedDict):
     resolved: bool
     replies: List['Comment']
     related_revision_id: Optional[str]
+
+
+class TableData(TypedDict):
+    id: str
+    content: List[List[str]]
+    position: Dict[str, int]
+    caption: Optional[str]
+
+
+class ImageData(TypedDict):
+    id: str
+    path: str  # Changed from 'data' to 'path'
+    format: str
+    position: Dict[str, int]
+    caption: Optional[str]
+
 
 def get_expanded_range(start: int, end: int, full_text: str, context_window: int = None) -> tuple[int, int]:
     """
@@ -78,12 +99,13 @@ def get_expanded_range(start: int, end: int, full_text: str, context_window: int
     
     # Clean citations from the referenced text before returning
     referenced_text = full_text[expanded_start:expanded_end]
-    referenced_text = clean_citations(referenced_text)
+    #referenced_text = clean_citations(referenced_text)
     
     # Adjust expanded_end based on cleaned text length
     expanded_end = expanded_start + len(referenced_text)
     
     return expanded_start, expanded_end
+
 
 def prepare_comment_text(comment: Dict) -> str:
     """Format comment data into a single text string."""
@@ -111,6 +133,7 @@ def prepare_comment_text(comment: Dict) -> str:
             text += reply_text
     return text
 
+
 def prepare_revision_text(revision: Dict) -> str:
     """Format revision data into a single text string."""
     text = (
@@ -132,6 +155,7 @@ def prepare_revision_text(revision: Dict) -> str:
         
     return text
 
+
 def clean_citations(text: str) -> str:
     """Remove citations and references section from text while preserving readability."""
     # Remove the References section and everything after it
@@ -148,25 +172,231 @@ def clean_citations(text: str) -> str:
     
     return text.strip()
 
-def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False) -> Union[Dict, str]:
-    """
-    Extract document history and format as text, optionally saving to file.
+def clean_citation_manager_text(text: str) -> str:
+    # Remove ADDIN EN.CITE and similar tags
+    text = re.sub(r'ADDIN EN\.CITE\.?[A-Z]*', '', text)
     
-    Args:
-        file_path: Path to the Word document
-        lm: Language model for section identification
-        write_to_file: Whether to write the processed content to a file (default: False)
+    # Remove base64 encoded EndNote XML data - these often appear between ADDIN tags
+    text = re.sub(r'[A-Za-z0-9+/=\n]{100,}', '', text)
     
-    Returns:
-        If write_to_file is True: Dictionary containing document history
-        If write_to_file is False: Formatted string containing document history
+    # Remove any remaining EndNote XML tags
+    text = re.sub(r'<EndNote>.*?</EndNote>', '', text)
+    
+    # Clean up citation brackets while preserving numbers
+    # This keeps citations like [22, 36] but removes extra EndNote formatting
+    citations = re.findall(r'\[[\d\s,]+\]', text)
+    clean_text = re.sub(r'\[.*?\]', '', text)
+    
+    # Add back essential citations
+    if citations:
+        clean_text = clean_text.strip() + ' ' + ' '.join(citations)
+    
+    # Remove multiple spaces and trim
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    
+    return clean_text
+
+
+def extract_tables(tree: etree.Element, namespace: Dict[str, str], position_counter: int) -> List[TableData]:
+    """Extract tables from the document."""
+    tables = []
+    
+    for element in tree.iter(f'{{{namespace["w"]}}}tbl'):
+        rows = []
+        for row in element.iter(f'{{{namespace["w"]}}}tr'):
+            cells = []
+            for cell in row.iter(f'{{{namespace["w"]}}}tc'):
+                cell_text = clean_citation_manager_text(''.join(cell.itertext()).strip())
+                cells.append(cell_text)
+            rows.append(cells)
+        
+        # Find caption if exists
+        caption = None
+        prev = element.getprevious()
+        if prev is not None and prev.tag == f'{{{namespace["w"]}}}p':
+            caption_text = ''.join(prev.itertext())
+            if caption_text.lower().startswith('table'):
+                caption = caption_text
+
+        table_data = {
+            'id': f'table_{len(tables)}',
+            'content': rows,
+            'position': {'start': position_counter, 'end': position_counter},
+            'caption': caption
+        }
+        tables.append(table_data)
+    
+    return tables
+
+
+def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[str, str], 
+                  position_counter: int, output_dir: Path) -> List[ImageData]:
     """
+    Extract images from the document and save to filesystem.
+    Images are saved to: output_dir/images/image_{n}.jpeg
+    """
+    images = []
+    
+    # Create images directory
+    images_dir = output_dir / 'images'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Read relationships file
+        rels = docx.read('word/_rels/document.xml.rels')
+        rels_tree = etree.fromstring(rels)
+        
+        # Create relationship ID to image path mapping
+        image_rels = {
+            rel.get('Id'): rel.get('Target')
+            for rel in rels_tree.iter()
+            if 'image' in rel.get('Type', '')
+        }
+        
+        # Process images in document
+        for element in tree.iter(f'{{{namespace["w"]}}}drawing'):
+            blip = element.find(
+                './/a:blip',
+                {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
+            )
+            
+            if blip is not None:
+                rid = blip.get(f'{{{namespace["r"]}}}embed')
+                if rid in image_rels:
+                    image_path = image_rels[rid]
+                    try:
+                        # Extract image data
+                        image_data = docx.read(f'word/{image_path}')
+                        
+                        # Convert to JPEG
+                        try:
+                            # Open image using PIL
+                            img = Image.open(io.BytesIO(image_data))
+                            
+                            # Convert to RGB if necessary
+                            if img.mode in ('RGBA', 'P'):
+                                img = img.convert('RGB')
+                            
+                            # Generate image filename
+                            image_id = f'image_{len(images)}'
+                            image_filename = f'{image_id}.jpeg'
+                            image_filepath = images_dir / image_filename
+                            
+                            # Save as JPEG file
+                            img.save(image_filepath, format='JPEG', quality=85)
+                            
+                        except Exception as e:
+                            print(f"Error converting image to JPEG: {e}")
+                            continue
+                        
+                        # Find caption
+                        caption = None
+                        next_elem = element.getnext()
+                        if next_elem is not None and next_elem.tag == f'{{{namespace["w"]}}}p':
+                            caption_text = ''.join(next_elem.itertext())
+                            if caption_text.lower().startswith('figure'):
+                                caption = caption_text
+
+                        image_info = {
+                            'id': image_id,
+                            'path': str(image_filepath.relative_to(output_dir)),  # Store relative path
+                            'format': 'jpeg',
+                            'position': {'start': position_counter, 'end': position_counter},
+                            'caption': caption
+                        }
+                        images.append(image_info)
+                        
+                    except KeyError:
+                        continue
+    
+    except KeyError:
+        pass
+    
+    return images
+
+
+def parse_references(text: str) -> List[Dict[str, str]]:
+    """Parse reference text into structured format."""
+    # Split text into individual references
+    raw_refs = re.split(r'\n(?=\d+\.)', text.strip())
+    
+    parsed_refs = []
+    for ref in raw_refs:
+        if not ref.strip():
+            continue
+            
+        # Extract reference number and content
+        match = re.match(r'(\d+)\.(.*)', ref.strip())
+        if not match:
+            continue
+            
+        ref_num, content = match.groups()
+        
+        # Parse authors, title, and publication info
+        # Look for italicized title between * characters
+        title_match = re.search(r'\*(.*?)\*', content)
+        title = title_match.group(1) if title_match else ""
+        
+        # Remove title from content to parse other parts
+        if title:
+            content = content.replace(f"*{title}*", "")
+        
+        # Extract DOI if present
+        doi_match = re.search(r'DOI:\s*([\S]+)', content)
+        doi = doi_match.group(1) if doi_match else None
+        
+        # Extract year if present
+        year_match = re.search(r'\b(19|20)\d{2}\b', content)
+        year = year_match.group(0) if year_match else None
+        
+        # Extract authors (everything before the title)
+        authors = content.split(title)[0].strip() if title else ""
+        authors = authors.strip(' .,')
+        
+        parsed_refs.append({
+            "number": ref_num,
+            "authors": authors,
+            "title": title,
+            "year": year,
+            "doi": doi,
+            "raw": ref.strip()
+        })
+    
+    return parsed_refs
+
+
+def extract_section_text(full_text: str, start_match: str, end_match: str, section_type: str = None) -> Union[str, List[Dict[str, str]]]:
+    """Helper function to extract text between start and end match strings."""
+    try:
+        start_idx = full_text.index(start_match)
+        end_idx = full_text.index(end_match) + len(end_match)
+        text = full_text[start_idx:end_idx].strip()
+        
+        # If this is a References section, parse it
+        if section_type == "References":
+            return parse_references(text)
+        return text
+    except ValueError:
+        return "" if section_type != "References" else []
+
+
+def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False, include_formatting: bool = True) -> Union[Dict, str]:
+    """Extract document history including images and tables."""
+    # Create output directory with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    paper_title = Path(file_path).stem
+    output_dir = Path('processed_documents') / f"{paper_title}_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
     document_history = {}
     
     with zipfile.ZipFile(file_path, 'r') as docx:
         document_xml = docx.read('word/document.xml')
         tree = etree.fromstring(document_xml)
-        namespace = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        namespace = {
+            'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        }
 
         # Build full text with formatting
         full_text = []
@@ -174,37 +404,37 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         
         for element in tree.iter():
             if element.tag == f'{{{namespace["w"]}}}p':  # Paragraph
-                # Check if this is a heading
-                style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
-                if style_element is not None:
-                    style = style_element.get(f'{{{namespace["w"]}}}val')
-                    if style == 'Heading1' or any(section_name.lower() in ''.join(element.itertext()).lower() 
-                                                 for section_name in ['abstract', 'introduction', 'methods', 
-                                                                    'results', 'discussion', 'conclusion']):
-                        current_formatting['heading'] = 1
-                        full_text.append(f"\n# ")  # Markdown-style heading
-                    else:
-                        current_formatting.pop('heading', None)
-                        full_text.append('\n')  # Regular paragraph break
-                else:
-                    current_formatting.pop('heading', None)
-                    full_text.append('\n')  # New paragraph
+                # Always add paragraph breaks
+                full_text.append('\n')
+                
+                if include_formatting:
+                    # Check if this is a heading
+                    style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
+                    if style_element is not None:
+                        style = style_element.get(f'{{{namespace["w"]}}}val')
+                        if style == 'Heading1' or any(section_name.lower() in ''.join(element.itertext()).lower() 
+                                                     for section_name in ['abstract', 'introduction', 'methods', 
+                                                                        'results', 'discussion', 'conclusion']):
+                            current_formatting['heading'] = 1
+                            full_text[-1] = f"\n# "  # Replace last newline with markdown heading
                     
             elif element.tag == f'{{{namespace["w"]}}}r':  # Run
-                # Check for text formatting
-                rPr = element.find(f'.//{{{namespace["w"]}}}rPr', namespace)
-                if rPr is not None:
-                    if rPr.find(f'.//{{{namespace["w"]}}}b', namespace) is not None:
-                        current_formatting['bold'] = True
-                    if rPr.find(f'.//{{{namespace["w"]}}}i', namespace) is not None:
-                        current_formatting['italic'] = True
+                # Check for text formatting only if enabled
+                if include_formatting:
+                    rPr = element.find(f'.//{{{namespace["w"]}}}rPr', namespace)
+                    if rPr is not None:
+                        if rPr.find(f'.//{{{namespace["w"]}}}b', namespace) is not None:
+                            current_formatting['bold'] = True
+                        if rPr.find(f'.//{{{namespace["w"]}}}i', namespace) is not None:
+                            current_formatting['italic'] = True
                 
             elif element.tag == f'{{{namespace["w"]}}}t':  # Text
                 text = element.text if element.text else ''
-                if current_formatting.get('bold'):
-                    text = f"**{text}**"
-                if current_formatting.get('italic'):
-                    text = f"*{text}*"
+                if include_formatting:
+                    if current_formatting.get('bold'):
+                        text = f"**{text}**"
+                    if current_formatting.get('italic'):
+                        text = f"*{text}*"
                 full_text.append(text)
                 current_formatting = {}  # Reset formatting after applying
         
@@ -213,7 +443,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         full_text = re.sub(r'\n{3,}', '\n\n', full_text)
         
         # Clean citations from the full text
-        full_text = clean_citations(full_text)
+        #full_text = clean_citations(full_text)
 
         # Initialize document history
         document_history = {
@@ -357,11 +587,20 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         for section in sections:
             start_match = section['match_strings']['start']
             end_match = section['match_strings']['end']
-            section['text'] = extract_section_text(full_text, start_match, end_match)
+            section['text'] = extract_section_text(
+                full_text, 
+                start_match, 
+                end_match,
+                section_type=section['type']
+            )
         
         # # Add sections to document_history
         document_history['sections'] = sections
         
+        # Extract tables and images
+        document_history['tables'] = extract_tables(tree, namespace, position_counter)
+        document_history['images'] = extract_images(docx, tree, namespace, position_counter, output_dir)
+
         # Create clean document structure
         document_history = {
             'document_id': document_history['document_id'],
@@ -375,30 +614,19 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
                 'match_strings': section['match_strings']
             } for section in sections],
             'comments': document_history['comments'],
-            'revisions': document_history['revisions']
+            'revisions': document_history['revisions'],
+            'tables': document_history['tables'],
+            'images': document_history['images']
         }
 
         # Write to file if requested
         if write_to_file:
-            base_filename = Path(file_path).stem
-            output_file = output_dir / f"{base_filename}_processed.json"
-            
+            output_file = output_dir / f"{paper_title}_processed.json"
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(document_history, f, indent=4)
-            
             print(f"File written to: {output_file.absolute()}")
         
         return document_history
-    
-
-def extract_section_text(full_text: str, start_match: str, end_match: str) -> str:
-    """Helper function to extract text between start and end match strings."""
-    try:
-        start_idx = full_text.index(start_match)
-        end_idx = full_text.index(end_match) + len(end_match)
-        return full_text[start_idx:end_idx].strip()
-    except ValueError:
-        return ""
 
 #Testing Usage
 if __name__ == "__main__":
@@ -414,10 +642,11 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm)
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
     processed_file = output_dir / f"ScolioticFEPaper_v7_processed2.txt"
     
     print(json.dumps(document_history, indent=4))
+    
