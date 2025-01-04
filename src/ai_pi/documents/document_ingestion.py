@@ -1,10 +1,8 @@
 """
-Extracts the process of revision from first draft to final draft,
-including comments, formatting changes, and their relationships.
-
-Currently removes references section. If it's desired to retain this information,
-changes would be needed to index the references and format them with appropriate
-context.
+Extracts:
+- Document Info, Sections
+- Existing comments
+- Images, Tables
 """
 
 from lxml import etree
@@ -602,8 +600,8 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     
-    # document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
-    document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
+    # document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
