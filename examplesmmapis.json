@@ -1,0 +1,1014 @@
+{
+  "figures": [{
+    "name": "1",
+    "page": 1,
+    "figType": "Figure",
+    "regionBoundary": {
+      "x1": 110.0,
+      "y1": 150.0,
+      "x2": 539.0,
+      "y2": 283.0
+    },
+    "caption": "Fig. 1. MMAPIS: Bridging Research and Readers.",
+    "imageText": [],
+    "captionBoundary": {
+      "x1": 243.85400390625,
+      "y1": 296.4373474121094,
+      "x2": 404.86590576171875,
+      "y2": 301.0639953613281
+    }
+  }, {
+    "name": "2",
+    "page": 9,
+    "figType": "Table",
+    "regionBoundary": {
+      "x1": 144.0,
+      "y1": 127.0,
+      "x2": 505.0,
+      "y2": 179.0
+    },
+    "caption": "Table 2. The performance of summary generation. Each sample is evaluated three times: the main value is the overall average score, and the subscript is the overall standard deviation.",
+    "imageText": ["Dataset", "Summarizer", "Informative", "Quality", "Coherence", "Attributable", "Overall", "Eval", "Average", "CS2017", "Ours", "4.5340.256", "4.4400.297", "4.5180.349", "4.5680.381", "4.5210.240", "4.5160.305GPT-4", "4.3920.246", "4.3500.282", "4.4440.330", "4.5540.324", "4.4340.200", "4.4350.276", "CS2023", "Ours", "4.4980.204", "4.3760.344", "4.4550.395", "4.4390.516", "4.4540.250", "4.4440.342GPT-4", "4.3630.260", "4.3170.268", "4.4290.263", "4.4600.462", "4.3770.232", "4.3890.297"],
+    "captionBoundary": {
+      "x1": 109.94599914550781,
+      "y1": 97.38837432861328,
+      "x2": 539.4340209960938,
+      "y2": 111.97698974609375
+    }
+  }, {
+    "name": "4",
+    "page": 12,
+    "figType": "Figure",
+    "regionBoundary": {
+      "x1": 73.0,
+      "y1": 95.0,
+      "x2": 502.0,
+      "y2": 287.0
+    },
+    "caption": "Fig. 4. Prompt Example.",
+    "imageText": [],
+    "captionBoundary": {
+      "x1": 247.93699645996094,
+      "y1": 300.98236083984375,
+      "x2": 327.34307861328125,
+      "y2": 305.6090087890625
+    }
+  }, {
+    "name": "1",
+    "page": 8,
+    "figType": "Table",
+    "regionBoundary": {
+      "x1": 98.0,
+      "y1": 605.0,
+      "x2": 478.0,
+      "y2": 640.0
+    },
+    "caption": "Table 1. Statistical information of CS datasets for 2023 and 2017.",
+    "imageText": ["Dataset", "Ave.", "Section", "Length", "(tokens)", "Ave.", "Document", "Length", "(tokens)", "Ave.", "Number", "of", "Sections", "CS2023", "1364", "9152", "6.71", "CS2017", "1163", "7730", "6.64"],
+    "captionBoundary": {
+      "x1": 181.2550048828125,
+      "y1": 586.0503540039062,
+      "x2": 393.8095397949219,
+      "y2": 590.677001953125
+    }
+  }, {
+    "name": "3",
+    "page": 8,
+    "figType": "Figure",
+    "regionBoundary": {
+      "x1": 73.0,
+      "y1": 95.0,
+      "x2": 502.0,
+      "y2": 380.0
+    },
+    "caption": "Fig. 3. The demos of the diversified user interfaces in MMAPIS (Optimized for enhanced visual presentation).",
+    "imageText": [],
+    "captionBoundary": {
+      "x1": 108.31600189208984,
+      "y1": 394.0963439941406,
+      "x2": 466.96246337890625,
+      "y2": 398.7229919433594
+    }
+  }, {
+    "name": "2",
+    "page": 4,
+    "figType": "Figure",
+    "regionBoundary": {
+      "x1": 73.0,
+      "y1": 195.0,
+      "x2": 502.0,
+      "y2": 430.0
+    },
+    "caption": "Fig. 2. The framework of the multi-modal automated academic paper interpretation system (MMAPIS).",
+    "imageText": [],
+    "captionBoundary": {
+      "x1": 117.90499877929688,
+      "y1": 443.80535888671875,
+      "x2": 457.3753967285156,
+      "y2": 448.4320068359375
+    }
+  }],
+  "sections": [{
+    "paragraphs": [{
+      "text": "Bridging Research and Readers: A Multi-Modal Automated Academic Papers Interpretation System",
+      "page": 0,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 95.62086486816406,
+        "x2": 488.9558410644531,
+        "y2": 120.7669677734375
+      }
+    }, {
+      "text": "FENG JIANG, The Chinese University of Hong Kong, Shenzhen, China",
+      "page": 0,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 138.78823852539062,
+        "x2": 343.2464294433594,
+        "y2": 145.1209716796875
+      }
+    }, {
+      "text": "KUANG WANG, Zhejiang University, China",
+      "page": 0,
+      "region": {
+        "x1": 73.44100952148438,
+        "y1": 154.97726440429688,
+        "x2": 248.36280822753906,
+        "y2": 161.30999755859375
+      }
+    }, {
+      "text": "HAIZHOU LI, The Chinese University of Hong Kong, Shenzhen, China",
+      "page": 0,
+      "region": {
+        "x1": 73.4410171508789,
+        "y1": 171.16629028320312,
+        "x2": 344.1624450683594,
+        "y2": 177.4990234375
+      }
+    }, {
+      "text": "In the contemporary information era, significantly accelerated by the advent of Large-scale LanguageModels (LLMs), the proliferation of scientific literature is reaching unprecedented levels. Researchers urgently require efficient tools for reading and summarizing academic papers, uncovering significant scientific literature, and employing diverse interpretative methodologies. To address this burgeoning demand, the role of automated scientific literature interpretation systems has become paramount. However, prevailing models, both commercial and open-source, confront notable challenges: they often overlook multimodal data, grapple with summarizing over-length texts, and lack diverse user interfaces. In response, we introduce an open-source multi-modal automated academic paper interpretation system (MMAPIS) with three-step process stages, incorporating LLMs to augment its functionality. Our system first employs the hybrid modality preprocessing and alignment module to extract plain text, and tables or figures from documents separately. It then aligns this information based on the section names they belong to, ensuring that data with identical section names are categorized under the same section. Following this, we introduce a hierarchical discourse-aware summarization method. It utilizes the extracted section names to divide the article into shorter text segments, facilitating specific summarizations both within and between sections via LLMs with specific prompts. Finally, we have designed four types of diversified user interfaces, including paper recommendation, multimodal Q&A, audio broadcasting, and interpretation blog, which can be widely applied across various scenarios. Our qualitative and quantitative evaluations underscore the system’s superiority, especially in scientific summarization, where it outperforms solutions relying solely on GPT-4. We hope our work can present an open-sourced user-centered solution that addresses the critical needs of the scientific community in our rapidly evolving digital landscape.",
+      "page": 0,
+      "region": {
+        "x1": 73.24099731445312,
+        "y1": 192.530517578125,
+        "x2": 502.7185363769531,
+        "y2": 384.53399658203125
+      }
+    }, {
+      "text": "Additional Key Words and Phrases: Multimodal Interpretation, Discourse-Aware Summarization, Large-Scale Language Model",
+      "page": 0,
+      "region": {
+        "x1": 73.16200256347656,
+        "y1": 397.5855407714844,
+        "x2": 483.6699523925781,
+        "y2": 402.7900085449219
+      }
+    }, {
+      "text": "ACM Reference Format: Feng Jiang, Kuang Wang, and Haizhou Li. 2018. Bridging Research and Readers: A Multi-Modal Automated Academic Papers Interpretation System. In . ACM, New York, NY, USA, 13 pages. https://doi.org/XXXXXXX.XXXXXXX",
+      "page": 0,
+      "region": {
+        "x1": 73.14600372314453,
+        "y1": 416.0408020019531,
+        "x2": 501.8411560058594,
+        "y2": 445.9519958496094
+      }
+    }]
+  }, {
+    "title": {
+      "text": "1 INTRODUCTION",
+      "page": 0,
+      "region": {
+        "x1": 73.44100952148438,
+        "y1": 465.4716796875,
+        "x2": 157.2320098876953,
+        "y2": 471.2550048828125
+      }
+    },
+    "paragraphs": [{
+      "text": "In the digital information era, the rate of data production is escalating daily, a phenomenon that is also evident in the realm of scientific research. The sheer volume of scholarly papers is burgeoning at an unprecedented pace. For instance, the renowned preprint server arXiv took over 23 years to accumulate its first million submissions, yet only seven years to gather the next two million, with the subsequent million potentially arriving in just four and a half years1. In certain scientific domains, query-based searches often yield a plethora of related articles, far exceeding human capacity for processing [2]. This explosion of information is particularly amplified by the advent of Large Language Models (LLMs),",
+      "page": 0,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 482.52392578125,
+        "x2": 502.82440185546875,
+        "y2": 556.8720092773438
+      }
+    }, {
+      "text": "1https://arxiv.org/stats/monthly_submissions",
+      "page": 0,
+      "region": {
+        "x1": 73.31500244140625,
+        "y1": 568.06787109375,
+        "x2": 202.07772827148438,
+        "y2": 574.2860107421875
+      }
+    }, {
+      "text": "Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org. © 2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. Manuscript submitted to ACM",
+      "page": 0,
+      "region": {
+        "x1": 72.95999908447266,
+        "y1": 587.4130859375,
+        "x2": 501.8388977050781,
+        "y2": 642.7769775390625
+      }
+    }, {
+      "text": "ar X",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 533.2999877929688,
+        "x2": 32.0,
+        "y2": 560.0
+      }
+    }, {
+      "text": "iv :2",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 497.739990234375,
+        "x2": 32.0,
+        "y2": 530.02001953125
+      }
+    }, {
+      "text": "40 1.",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 457.739990234375,
+        "x2": 32.0,
+        "y2": 498.8999938964844
+      }
+    }, {
+      "text": "09 15",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 422.739990234375,
+        "x2": 32.0,
+        "y2": 463.8999938964844
+      }
+    }, {
+      "text": "0v 1",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 392.739990234375,
+        "x2": 32.0,
+        "y2": 423.8999938964844
+      }
+    }, {
+      "text": "[ cs",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 357.1999816894531,
+        "x2": 32.0,
+        "y2": 383.8999938964844
+      }
+    }, {
+      "text": ".C L",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 331.0799865722656,
+        "x2": 32.0,
+        "y2": 360.5799865722656
+      }
+    }, {
+      "text": "] 1",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 302.1999816894531,
+        "x2": 32.0,
+        "y2": 330.0199890136719
+      }
+    }, {
+      "text": "7 Ja",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 269.41998291015625,
+        "x2": 32.0,
+        "y2": 303.3599853515625
+      }
+    }, {
+      "text": "n 20",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 235.54000854492188,
+        "x2": 32.0,
+        "y2": 271.70001220703125
+      }
+    }, {
+      "text": "24",
+      "page": 0,
+      "region": {
+        "x1": 30.0,
+        "y1": 215.54000854492188,
+        "x2": 32.0,
+        "y2": 236.70001220703125
+      }
+    }, {
+      "text": "which have significantly accelerated the production of scientific literature. The overwhelming abundance of research papers necessitates a transformation in how we access, comprehend, and engage with scientific knowledge, prompting the need for innovative approaches to managing and interacting with this ever-growing body of work.",
+      "page": 1,
+      "region": {
+        "x1": 109.8290023803711,
+        "y1": 99.14897155761719,
+        "x2": 538.5616455078125,
+        "y2": 132.4010009765625
+      }
+    }, {
+      "text": "Recent trends in research have seen the gradual emergence of paper interpretation systems, withmany commercialized service platforms 2 progressively coming online. These systems are capable of swiftly extracting the gist of entire papers from academic websites like arXiv and providing interpretations in the form of summaries. The latest GPT-4 3 model also offers the capability to upload PDF documents and interpret papers by designing specific prompts. However, their proprietary nature renders their operational processes opaque and raises concerns about information security when uploading papers to third-party websites. On the other hand, some open-source works 4 focus on converting PDF documents into text using OCR (Optical Character Recognition) technology, followed by feeding the text into summarization models or Large Language Models (LLMs) to obtain the final interpretation. Despite the advancements in paper interpretation systems, fulfilling the aforementioned functional requirements presents several challenges:",
+      "page": 1,
+      "region": {
+        "x1": 109.8290023803711,
+        "y1": 325.4859313964844,
+        "x2": 539.5501708984375,
+        "y2": 440.92999267578125
+      }
+    }, {
+      "text": "Overlooking Multimodal Data in Academic Papers: Most existing paper interpretation systems primarily treat papers as the text for summarization, overlooking the structure information and other modalities, such as mathematical formulas, tables, figures, and so forth, that encapsulate the most crucial experimental results, concepts, or workflows [5]. This singular focus on textual information fails to capture the full richness of multimodal data, which is often crucial in scholarly papers.",
+      "page": 1,
+      "region": {
+        "x1": 109.89199829101562,
+        "y1": 448.77392578125,
+        "x2": 539.9403686523438,
+        "y2": 509.42401123046875
+      }
+    }, {
+      "text": "Grappling with summarization for over-length text: Previous methods of summarization have been limited in their ability to handle longer texts. Although current large-scale language models (e.g., those capable of processing texts up to 100K words [8]) can manage over-length texts, they often struggle to capture complex details [18]. On the other hand, segmented summarization approaches typically employ length truncation or fixed grouping methods, leading to semantic incompleteness. Additionally, each section of a paper has different focal points, necessitating distinct considerations for their summarization.",
+      "page": 1,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 517.2669677734375,
+        "x2": 538.730712890625,
+        "y2": 591.614990234375
+      }
+    }, {
+      "text": "2https://papers.cool/ https://www.paperdigest.org/ https://www.paperreading.club/ 3https://chat.openai.com/?model=gpt-4 4https://github.com/Anil-matcha/ChatPDF https://github.com/kaixindelele/ChatPaper",
+      "page": 1,
+      "region": {
+        "x1": 110.03500366210938,
+        "y1": 605.3718872070312,
+        "x2": 231.4772186279297,
+        "y2": 652.323974609375
+      }
+    }, {
+      "text": "Lacking Diverse User Interface: The existing systems largely overlook the potential of multimodal and varied downstream task scenarios. They typically only display results as summaries or engage in text-based chats about the paper. This limitation can inconvenience many users, especially those in related fields who would benefit from more diverse methods of paper interpretation.",
+      "page": 2,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 99.14897155761719,
+        "x2": 501.83978271484375,
+        "y2": 146.0999755859375
+      }
+    }, {
+      "text": "To address the aforementioned challenges, we introduce an open-source, multimodal academic paper interpretation system (MMAPIS) 5 bridging research and readers, as shown in Figure 1. It comprises three key phases: multimodal PDF information processing and alignment, hierarchical discourse-aware summarization, and a variety of multimodal user interfaces. Our system adeptly processes scientific literature in PDF format from sources like arXiv or user-uploaded documents, extracting structured text, images, tables, and equations separately to consider multimodal information comprehensively. Then, by employing a discourse-aware approach for sectional summarization, the system ensures that all critical information within a paper is captured, and there will be different focuses for each specific section, especially the key parts, such as methods and models that often appear in the middle of the document. Finally, we offer a diverse array of multimodal downstream user interfaces, including paper recommendations, multimodal Q&A, audio broadcasting, and interpretation blogs.",
+      "page": 2,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 153.9429168701172,
+        "x2": 502.8236999511719,
+        "y2": 283.08599853515625
+      }
+    }, {
+      "text": "Specifically, our system begins by separately processing the text and other modalities (images, tables) of PDF-format papers. For the text, we employ the advanced Nougat model to convert it into a markdown format with rich text, which includes structured markup to indicate the structure of the document and formulas. For other modalities, we use PDFFigures to extract images and tables contained within each section of the paper. Then, we align information from different modalities using section names, allowing content from various modalities to be attributed to the same section, which facilitates the use in subsequent applications. Next, we introduce a hierarchical, discourse-aware summarization method to effectively alleviate the process of textual constraints imposed by most summarization methods as they are often limited in max tokens, due to memory complexities, hardware constraints, and time-consuming pretraining processes [10, 31]. Initially, we use the extracted section boundaries to divide the paper into several parts. Each part is then summarized using a Large Language Model (LLM) with special prompts. Subsequently, these individual summaries are consolidated based on requirements, ensuring that important information from each section of the document is retained and not overlooked. Finally, we have developed four common types of interactive applications by utilizing LLMs with various tools and specifically designed prompts. These include paper recommendation applications that score the quality of papers, detailed blog interpretations of paper content, more convenient audio readings, and multimodal interactive Q&A. Our system also supports the customization of downstream applications by providing the necessary APIs. Our contributions are summarized by the following:",
+      "page": 2,
+      "region": {
+        "x1": 73.10900115966797,
+        "y1": 290.9289245605469,
+        "x2": 502.8236389160156,
+        "y2": 502.2640075683594
+      }
+    }, {
+      "text": "• We propose an open-source multimodal paper interpretation system that provides a clear and concise solution to enhance readers’ understanding and efficiency of scientific papers. It can effectively process scientific papers from sources such as arXiv or user uploaded PDFs, generating different forms of paper interpretation. • We introduce a multimodal alignment method to preprocess PDF-format scientific papers, separately handling text and visual elements (images and tables) followed by a section-wise alignment process. It ensures coherent integration of text, images, and tables within the same section, enhancing the comprehension of multimodal information in scientific papers.",
+      "page": 2,
+      "region": {
+        "x1": 89.40799713134766,
+        "y1": 518.248779296875,
+        "x2": 501.8428955078125,
+        "y2": 606.7789916992188
+      }
+    }, {
+      "text": "5Our code will be released at https://github.com/fjiangAI/MMAPIS.",
+      "page": 2,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 644.1428833007812,
+        "x2": 265.5675964355469,
+        "y2": 650.3609619140625
+      }
+    }, {
+      "text": "• We develop a hierarchical, discourse-aware summarization method for dealing with long scientific documents. It utilizes structured text extracted from documents to produce concise summaries at both section and document levels, ensuring the retention of essential information. • We offer a range of user interfaces to present paper interpretation results. It provides users with insights in various formats including paper recommendations, multimodal Q&A, audio broadcasting, and interpretation blogs, enhancing user engagement with scientific papers in various scenarios.",
+      "page": 3,
+      "region": {
+        "x1": 126.12800598144531,
+        "y1": 98.66477966308594,
+        "x2": 538.5631103515625,
+        "y2": 173.49700927734375
+      }
+    }]
+  }, {
+    "title": {
+      "text": "2 RELATEDWORK",
+      "page": 3,
+      "region": {
+        "x1": 110.1610107421875,
+        "y1": 192.99468994140625,
+        "x2": 194.75897216796875,
+        "y2": 198.77801513671875
+      }
+    },
+    "paragraphs": [{
+      "text": "Dealing with Source Paper in Academic Papers Interpretation Systems. The efficiency of an interpretation system hinges largely on the quality of data retrieved from PDF files. Historical reliance was placed on Optical Character Recognition (OCR) engines to distill plaintext for subsequent processing in earlier interpretation systems. While these engines have shown efficacy in extracting individual characters and words from images, their line-by-line approach fails to preserve relative positional relationships among different formats, particularly with regard to mathematical expressions and tables [6]. Moreover, multimodal elements embedded within the documents often elude these OCR engines. Present trends in interpretation systems favor the utilization of efficient PDF Parsing Libraries, exemplified by systems such as D2S[24] and ChatPaper 6, which utilize Grobid, and ChatPDF 7, based on PyPDFium2Loader. Relative to OCRs, these libraries excel in analyzing PDF document structure to extract richer metadata, including embedded images. However, they still face challenges in retrieving location-specific information, such as formulas, and exhibit limitations when dealing with scientific documents that integrate images directly into the PDF format, hence, their utility remains somewhat limited. Their inherent object-based processing approach, coupled with a tendency to overlook the integrity of structural discourse, results in an inability to semantically connect different objects, necessitating the deployment of an additional Information Retrieval (IR) model for alignment [24].",
+      "page": 3,
+      "region": {
+        "x1": 109.8290023803711,
+        "y1": 210.0459442138672,
+        "x2": 539.9365844726562,
+        "y2": 393.9840087890625
+      }
+    }, {
+      "text": "Summarization in Academic Papers Interpretation Systems. As a crucial component of paper interpretation systems, extracting key information from academic papers is often approached as a summarization task. Since the 1950s, the field of generic text summarization has seen significant progress [11]. However, summarizing academic papers presents unique challenges, given their structured nature with typical sections such as the introduction, methodology, experiments, and conclusions. The excessively long text poses a challenge for directly summarizing [25]. Previous studies have indicated that despite the ability of large-scale language models to process inputs of up to 100,000 words [8], they tend to disproportionately lose information from the middle sections of texts [18]. Reducing the text to shorter text blocks is the mainstream approach. On the one hand, the methods employed include selecting key sentences or words [15, 23, 29] and using segmented sliding windows [21] in conjunction with attention mechanisms [3, 30]. They do not consider the inherent structured information of the text, which can easily lead to incomplete semantic segmentation of the obtained abstract. On the other hand, the abstracts of different parts have different focuses, such as the abstract and methodology sections, and a unified abstract cannot meet their characteristics.",
+      "page": 3,
+      "region": {
+        "x1": 109.8290023803711,
+        "y1": 401.8269348144531,
+        "x2": 539.550048828125,
+        "y2": 558.3670043945312
+      }
+    }, {
+      "text": "User Interaction in Academic Papers Interpretation Systems. Current paper interpretation systems primarily employ two types of user interaction models: textual summaries and dialog-based interpretations. Textual Summary Systems: These systems generate concise text-based summaries of scientific papers8. While efficient in providing quick overviews, they often lack depth and neglect the multimodal aspects of papers, such as graphs and tables. Dialog-based",
+      "page": 3,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 566.2109375,
+        "x2": 538.7957153320312,
+        "y2": 613.1619873046875
+      }
+    }, {
+      "text": "6https://github.com/kaixindelele/ChatPaper 7https://github.com/Anil-matcha/ChatPDF 8https://papers.cool/,https://hub.baai.ac.cn/papers",
+      "page": 3,
+      "region": {
+        "x1": 110.03500366210938,
+        "y1": 629.2528686523438,
+        "x2": 251.7903594970703,
+        "y2": 652.2940063476562
+      }
+    }, {
+      "text": "Interpretation Systems: These systems engage users in an interactive dialogue format 9, allowing for query-based information retrieval. However, their adaptability is limited, particularly in handling multimodal content (such as figures and tables) and varying interaction scenarios like blog interpretation or audio readings. While these systems offer basic interpretative insights, they commonly fall short of fully supporting multimodal content and lack flexibility across different application scenarios.",
+      "page": 4,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 96.99995422363281,
+        "x2": 502.0720520019531,
+        "y2": 159.7979736328125
+      }
+    }]
+  }, {
+    "title": {
+      "text": "3 THE FRAMEWORK OF MULTI-MODAL AUTOMATED SCIENTIFIC PAPER INTERPRETATION SYSTEM",
+      "page": 4,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 177.80963134765625,
+        "x2": 501.6838073730469,
+        "y2": 183.593017578125
+      }
+    },
+    "paragraphs": [{
+      "text": "As highlighted in Section 1, paper interpretation systems are crucial for aiding academic research, rapidly extracting key information, and enhancing the efficiency of literature review processes. However, current systems exhibit notable limitations in handling multimodal data (such as text, images, and equations), processing lengthy documents, and providing diverse user interfaces. To address these challenges, we have developed an open-sourced multi-modal automated academic paper interpretation system (MMAPIS), whose design and components are depicted in the accompanying Fig. 2. Our system comprises three main parts: (1) Hybrid Modality Preprocessing and Alignment Module; (2) Hierarchical Discourse-Aware Summarization Module; (3) Diverse Multimodal User Interface Module. Firstly, the Hybrid Modality Preprocessing and Alignment Module effectively processes and integrates different types of information from papers separately, including text, images, and tables. Next, the Hierarchical Discourse-Aware Summarization Module utilizes advanced LLMs with special prompts to extract key information from each section of a paper, generating comprehensive and accurate summaries. Lastly, our system features a Diverse Multimodal User Interface Module, designed to meet the specific needs of various user groups, offering multiple interaction modes like paper recommendations, multimodal Q&A, audio broadcasting, and interpretation blogs. 9https://github.com/arc53/DocsGPT,https://chat2doc.cn/,",
+      "page": 4,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 467.59991455078125,
+        "x2": 502.009765625,
+        "y2": 652.948974609375
+      }
+    }]
+  }, {
+    "title": {
+      "text": "3.1 Hybrid Modality Preprocessing and Alignment Module",
+      "page": 5,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 99.220703125,
+        "x2": 354.540283203125,
+        "y2": 105.0040283203125
+      }
+    },
+    "paragraphs": [{
+      "text": "Given the difficult task of manipulating multimodal content present in PDFs, our objective is to reconstruct the source document into semantically similar counterparts, such as inMarkdown format, following HybridModality Preprocessing. The reformed document can facilitate subsequent alignment modules and produce semantically comprehensive, highquality summaries by preserving rich multimodal information (such as tables and figures) and the hierarchical discourse structure (such as sections).",
+      "page": 5,
+      "region": {
+        "x1": 109.89199829101562,
+        "y1": 116.27195739746094,
+        "x2": 540.0718383789062,
+        "y2": 176.9210205078125
+      }
+    }, {
+      "text": "Unlike traditional methodologies predominantly relying on OCR engines or efficient libraries, which fail to discern position-sensitive modal details and ignore document structure specifics, our preprocessing approach is inspired by Nougat [6] and PDFFigures 2.0 [9] to respectively extract text and other modalities. Nougat provides an end-to-end trainable encoder-decoder transformer-based model, adept at predicting text information in pictures, including plaintext and mathematical formulas in the screenshots of each PDF page, to markdown format. We utilize Nougat as a tool for extracting text and its inherent hierarchical structure between different paragraphs from PDFs, minimizing data loss during conversion and thereby significantly reducing the complexity of the subsequent segmentation. In addition, PDFFigures 2.0 [9], a methodology that identifies figures and tables by reasoning about the empty regions within the text, provides not only the images but also their attribution information. This reduces the difficulty of multimodal alignment when assigning affiliations across modalities based on their relative structural information to layout tokens, such as section titles.",
+      "page": 5,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 184.7649383544922,
+        "x2": 539.546630859375,
+        "y2": 327.6059875488281
+      }
+    }, {
+      "text": "The results of both methods, Nougat and PDFFigures 2.0, complement each other—Nougat yields plaintext and mathematical formulas, whilst PDFFigures 2.0 provides screenshots of figures and tables. Notably, these components extracted plaintext or figures with the section name, which can be intuitively aligned with their corresponding title-like keywords, thereby facilitating the recreation of parsing results that closely adhere to the structure of the source document. Specifically, all tables and figures parsed from the PDF are retained after aligning the sections they belong to due to their value in encapsulating the most critical experimental results and concepts in scientific documents [5].",
+      "page": 5,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 335.4499206542969,
+        "x2": 538.5592651367188,
+        "y2": 409.7980041503906
+      }
+    }]
+  }, {
+    "title": {
+      "text": "3.2 Hierarchical Discourse-aware Summarization Module",
+      "page": 5,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 434.836669921875,
+        "x2": 349.5907897949219,
+        "y2": 440.6199951171875
+      }
+    },
+    "paragraphs": [{
+      "text": "To address the challenges of long documents frequently encountered in interpretation systems, we introduce a two-stage summary process, Hierarchical Discourse-aware Summarization, to generate a holistic interpretation. This methodology could alleviate the limitations of previous works (such as semantic fragmentation and efficiency detriments) by splitting documents with section names given by the first module and generating the summary within and between sections via LLMs.",
+      "page": 5,
+      "region": {
+        "x1": 109.89199829101562,
+        "y1": 451.887939453125,
+        "x2": 538.794189453125,
+        "y2": 512.5379638671875
+      }
+    }, {
+      "text": "The first stage of our methodology is devoted to the formation of a section-level summary. The process first involves partitioning the document into sections using the hierarchical cues embedded in the title within the Markdown. This approach diverges from the predefined four sections proposed by FacetSum [19], which might only be universally applicable to some papers. Instead, our approach favors dissection at almost every individual section. This flexibility permits a reduction in the lengths of processing segments whilst ensuring the maintenance of section-level and document-level semantic integrity without overlap. Further, it offers adaptive control to expand or contract sections as needed, mitigating noise interference. For example, sections such as the appendix and references can be excised, promoting a more streamlined content-processing experience. Segments such as abstract, introduction, etc, are then matched with corresponding prompts from our prearranged set, specifically designed to facilitate the extraction of key points. This step operates under the assumption that scientific documents adhere to a generic structure [12], and the",
+      "page": 5,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 520.3809204101562,
+        "x2": 539.543701171875,
+        "y2": 649.5239868164062
+      }
+    }, {
+      "text": "primary function of each section remains relatively constant. The user-specific prompt encourages the LLMs with the dependence that aligns with the reader’s needs and expectancy [14, 28] for multi-faceted insight. For sections whose titles are absent from the prompt set, we assign a universal prompt as a viable alternative.",
+      "page": 6,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 99.14897155761719,
+        "x2": 501.8377380371094,
+        "y2": 132.4010009765625
+      }
+    }, {
+      "text": "Upon generating section-level summaries, we proceed to a prompt-guided integration stage to construct a documentlevel summary. It mainly focuses on fortifying the cohesion and continuity between sections, thereby guiding the downstream application. Notably, during the integration stage, we include the title, authors, and affiliation information filtered through NER technology within the reference text, enhancing the synthesized summary’s affinity.",
+      "page": 6,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 140.2449188232422,
+        "x2": 503.3546447753906,
+        "y2": 187.19500732421875
+      }
+    }]
+  }, {
+    "title": {
+      "text": "3.3 Diverse Multimodal User Interface Module",
+      "page": 6,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 207.13970947265625,
+        "x2": 268.30780029296875,
+        "y2": 212.92303466796875
+      }
+    },
+    "paragraphs": [{
+      "text": "Our interpretation system, enhanced by a user-friendly Streamlit-based interface, adeptly transforms the outputs from the Hierarchical Discourse-Aware Summarization Module into four distinct downstream applications, each tailored to fit different user scenarios and ordered by the generated content-length:",
+      "page": 6,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 224.1919403076172,
+        "x2": 501.8431396484375,
+        "y2": 257.4439697265625
+      }
+    }, {
+      "text": "1. Paper Recommendation: As the first application, our system employs meticulously designed LLM prompts to evaluate papers across five critical dimensions: clarity of objectives and central themes, appropriateness and accuracy of methods, authenticity and precision of data and findings, depth and conclusiveness of analysis, and overall writing quality. The primary four document-level indicators rely on generated summaries for token reduction assessment. However, evaluating overall writing quality, a more fine-grained metric at the paragraph or even word level, necessitates the use of the original text for a fair assessment. Due to the potential for token overflow and assumptions about writing consistency, considering the reader’s inclination to first read the beginning and end, the evaluation is applied to strategically selected excerpts, specifically the introductory and concluding sections. These features aim to swiftly gauge the quality of a paper, providing users with immediate insights into its merits.",
+      "page": 6,
+      "region": {
+        "x1": 73.10900115966797,
+        "y1": 265.2869567871094,
+        "x2": 503.21685791015625,
+        "y2": 380.7309875488281
+      }
+    }, {
+      "text": "2. Multimodal Q&A: Advancing beyond the confines of conventional text-based question-and-answer formats, our system introduces an amplified two-tier Q&A feature that incorporates specific queries about figures or tables extracted from the papers. With the user’s request for an in-depth elucidation of a graphic representation within the paper, we initially employ GPT-3.5 Turbo to discern the chart’s provenance from user’s questions, that is, the index of the illustration juxtaposed with the section to which it pertains, e.g. (\"Introduction\",1) to locate the target picture. Then we feed user queries and relevant images to GPT-4 to deliver a comprehensive interpretation. This functionality leverages GPT-4’s multimodal processing abilities, enabling more precise and targeted responses, thereby enriching the user’s understanding of the paper’s content.",
+      "page": 6,
+      "region": {
+        "x1": 73.1719970703125,
+        "y1": 388.5749206542969,
+        "x2": 503.2216796875,
+        "y2": 490.32000732421875
+      }
+    }, {
+      "text": "3. Audio Broadcasting: Recognizing the need for quick assimilation of information in real-time scenarios, our system introduces a feature tailored for the generation of colloquial broadcast scripts. Utilizing prompts with ChatGPT for the formulation of straightforward sentences, it synthesizes narratives suitable for verbal dissemination predicated on the produced summary. Then audio broadcasting is generated through text-to-speech (TTS) interfaces, such as Azure TTS 10 or Youdao TTS, thereby providing users with a distinctive and user-friendly method to engage with the research.",
+      "page": 6,
+      "region": {
+        "x1": 73.12699890136719,
+        "y1": 498.1639404296875,
+        "x2": 502.1065368652344,
+        "y2": 572.511962890625
+      }
+    }, {
+      "text": "4. Interpretation Blog: The system provides an interpretation blog feature that demands detailed and thorough insights for a more in-depth exploration of the paper. This tool leverages LLM-grounded prompts to render interpretative blogs derived from the created summary, fostering an extensive comprehension of the paper’s central subject matter and intricate technical elements through aligning Title-like Keywords to integrate other modalities. Special emphasis",
+      "page": 6,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 580.35595703125,
+        "x2": 502.0102233886719,
+        "y2": 627.3070068359375
+      }
+    }, {
+      "text": "10https://azure.microsoft.com/en-us/products/ai-services/text-to-speech/",
+      "page": 6,
+      "region": {
+        "x1": 73.31500244140625,
+        "y1": 645.8529052734375,
+        "x2": 279.8382263183594,
+        "y2": 652.0709838867188
+      }
+    }, {
+      "text": "is placed on readability and adherence to established blog formats, ensuring a seamless narrative flow from a clear introduction to a conclusive ending.",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 99.14897155761719,
+        "x2": 538.7296752929688,
+        "y2": 118.7020263671875
+      }
+    }]
+  }, {
+    "title": {
+      "text": "3.4 Prompt Design",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 138.00872802734375,
+        "x2": 191.69248962402344,
+        "y2": 143.79205322265625
+      }
+    },
+    "paragraphs": [{
+      "text": "Since Transformer-based models are better optimized towards short document language tasks rather than long documents [18], our goal is to ensure the prompt of each role preserves unique responsibilities while maintaining brevity. Ideally, crucial information should be located either at the onset or the end of input text, and the prompt should be kept brief to optimize performance. We thus categorize prompts into three distinct segments and more details are shown in Appendix:",
+      "page": 7,
+      "region": {
+        "x1": 109.84700012207031,
+        "y1": 155.05992126464844,
+        "x2": 540.0736083984375,
+        "y2": 215.71002197265625
+      }
+    }, {
+      "text": "• Task Description: This segment, the prompt for the \"system\" role, gives an overview of the task, describing the needs, objectives, or background and stipulates the desired format of the output. • Current Input: The \"user\" role inputs text from the raw document content, previously generated summary, or both, serving as a source of external knowledge to better comprehend the entire text. • Output Indicator: This segment for the \"system\" role defines a specific workflow, providing guidelines for GPT to follow.",
+      "page": 7,
+      "region": {
+        "x1": 126.12799835205078,
+        "y1": 226.80979919433594,
+        "x2": 538.8282470703125,
+        "y2": 301.6419982910156
+      }
+    }, {
+      "text": "In the realm of output indicators, We adroitly blend the technologies of Chain of thought (CoT) and Chain of Density (CoD) [1], each selected for its unique benefits. CoT stands out for its robustness and ability to significantly surpass the standard baseline [27], CoD, in turn, expertly manages information density to harmonize between informativeness and intelligibility.",
+      "page": 7,
+      "region": {
+        "x1": 109.89199829101562,
+        "y1": 313.2269287109375,
+        "x2": 538.792724609375,
+        "y2": 360.1780090332031
+      }
+    }, {
+      "text": "For generating section summaries or downstream applications, e.g., broadcasts and blogs, we employ CoT as a tool for introspective evaluation and continuous enhancement. Particularly when producing section summaries, we blend the task description and output indicator to ensure task clarity and condense output requirements while stipulating the specific output format in downstream applications, considering the varying requirements of diverse output modes.",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 368.02093505859375,
+        "x2": 538.5579833984375,
+        "y2": 414.97198486328125
+      }
+    }, {
+      "text": "Conversely, in the process of merging section summaries or regenerating, we apply CoD to mitigate any potential loss of valuable entities while simultaneously boosting information density, thereby providing a more comprehensive and informative interpretation.",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 422.81591796875,
+        "x2": 538.5602416992188,
+        "y2": 456.0679931640625
+      }
+    }]
+  }, {
+    "title": {
+      "text": "4 DEMO & EVALUATION",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 475.3746643066406,
+        "x2": 218.09849548339844,
+        "y2": 481.1579895019531
+      }
+    },
+    "paragraphs": []
+  }, {
+    "title": {
+      "text": "4.1 Demo",
+      "page": 7,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 492.4976501464844,
+        "x2": 155.00196838378906,
+        "y2": 498.2809753417969
+      }
+    },
+    "paragraphs": [{
+      "text": "In Fig. 3, we showcase our versatile and adaptable downstream applications, each tailored for different scenarios. The case study revolves around the seminal paper titled “Attention is All You Need” [26], which introduced the revolutionary “transformer”, aimed at facilitating observations. Initially, we present a recommendation score in markdown format anchored in the top left corner, enabling academics to promptly assess the quality of papers across five distinct dimensions. Subsequently, our multimodal Q&A mechanism enhances interpretive comprehension through a dialogueoriented exploration of key content, including data encapsulated in figures, as exemplified by the lower left corner. To address scenarios that demand convenience, such as engaging with content while driving or during mealtimes, we provide an audio feature in MP3 format, offering a preliminary understanding of the manuscript’s narrative. Ultimately, the top right corner displays the resulting blog posts in markdown format, retaining almost all metadata extracted from the source document, including figures, tables, mathematical formulas, and plain text, emphasizing readability and audience engagement, thereby expediting comprehension of the paper’s core subject.",
+      "page": 7,
+      "region": {
+        "x1": 109.14800262451172,
+        "y1": 509.5489196777344,
+        "x2": 540.074951171875,
+        "y2": 652.3900146484375
+      }
+    }]
+  }, {
+    "title": {
+      "text": "4.2 Quantitative Analysis for Summarization",
+      "page": 8,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 422.3216552734375,
+        "x2": 261.1974182128906,
+        "y2": 428.10498046875
+      }
+    },
+    "paragraphs": [{
+      "text": "In addition to the case studies mentioned above, we conducted a quantitative analysis focusing on the core aspect of paper interpretation systems – the quality of paper summarization. Specifically, we first selected 100 papers from arXiv to form our test set. Since the training data for GPT-4 ends in April 2023, to avoid performance bias due to data leakage, we sampled 50 papers each from December 2017 and December 2023 on arXiv, forming two test subsets named CS2017 Dataset and CS2023 Dataset, respectively. The statistical information of these subsets is shown in Table 1. For our baseline system, we tested the currently best-performing model, GPT-4, to compare its performance against our model. In terms of evaluation metrics, we adopted the COD approach, which includes five dimensions: Informative, Quality, Coherence, Attributable, and Overall [1]. It involves using GPT-4 to score the summaries instead of using ROUGE scores due to the absence of reference texts and the inability of ROUGE scores to identify overlaps between synonymous tokens or phrases [4, 7, 13, 17].",
+      "page": 8,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 439.3739318847656,
+        "x2": 502.8232421875,
+        "y2": 568.5159912109375
+      }
+    }, {
+      "text": "4.2.1 Result & Analysis. As demonstrated by the results, our system surpasses GPT-4 in nearly all aspects in both the CS2023 Dataset and CS2017 Dataset through Horizontal comparison. Specifically, in the dimension of Informative and Overall, our methodology exhibits a remarkable advancement compared to the generalized summary offered by GPT-4 and remains relatively stable, presenting that the result of MMAPIS offers denser entity density and detailed information of key specific, which tends to be more favored by humans, as demonstrated in [1] that the overall dimension has the highest summary-level Pearson Correlation to human preference, while others also maintain a positive correlation ranging from 0.120 to 0.245. Such evidence underscores the efficient performance of Hierarchical Discourse-Aware Summarization, which reduces the likelihood of information loss during segmentation and enables the summarizer to yield a comparatively detailed summary, thereby accurately encapsulating the key narratives and catering to human preference.",
+      "page": 9,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 219.65196228027344,
+        "x2": 538.767578125,
+        "y2": 348.7950134277344
+      }
+    }, {
+      "text": "The underlying rationale for this observation is that the Hierarchical Discourse Summarization mitigates the ’layout bias’ identified by Kryściński et al. [17], i.e., approximately 60 % of essential sentences are located within the opening 30%. Unlike conventional methods that favor extraction or truncation based on empirical knowledge or model design, our method veers away from layout bias by using data that closely resembles the original text, which preserves the semantic and structural integrity of the information, even when filtering out particular sections that are less valuable to the readers. It’s supported by [16], which showed that salient content is more uniformly dispersed throughout long documents, in contrast to models that often benefit from layout biases in short documents [12, 20, 22].",
+      "page": 9,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 356.638916015625,
+        "x2": 539.5446166992188,
+        "y2": 444.68499755859375
+      }
+    }, {
+      "text": "The notable performance enhancement may also be attributed to the interesting observation connected with the hypothesize of the \"lost in the middle\" phenomenon [18] that LLMs exhibit a ‘U-shaped’ performance curve with a strong reliance on information appearing at the beginning and end. Specifically, as our method segments the text based on the document’s structure, the average length of each section within the documents of CS2017 Dataset and CS2023 Dataset is maintained below 2000 tokens, specifically averaging at 1163 and 1364 tokens, respectively. This approach substantially mitigates any potential performance degradation instigated by the position sensitivity in comparison to processing the entire text body, which encapsulates approximately 7,730 to 9,152 tokens, respectively, representing nearly a 6.7-fold increase in length. As evidenced by [18], where GPT-3.5 Turbo’s QA performance can drop by over 20% with approximately 4000 token inputs while maintaining considerable performance with around 2000 token inputs. It can also be inferred that the minimum grid of Hierarchical Discourse-Aware Summarization, which is section-based in the first stage, represents a trade-off between speed and accuracy.",
+      "page": 9,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 452.5289306640625,
+        "x2": 539.9368286132812,
+        "y2": 595.3699951171875
+      }
+    }, {
+      "text": "In a longitudinal comparison, both GPT-4 and the MMAPIS exhibit a discernible performance deterioration across all dimensions. Interestingly, in document-free dimensions,e.g., Quality and Coherence, the degradation is less severe, while in dimensions related to technical intricacies and knowledge reserves, observe a more marked reduction, potentially owing to the reoccurring issue of ‘hallucinations’ - a common trait amongst GPT models. Another contributing factor",
+      "page": 9,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 603.2139282226562,
+        "x2": 538.7943725585938,
+        "y2": 650.1649780273438
+      }
+    }, {
+      "text": "could be the average length increase in data from the CS2017 Dataset, i.e., 1163, to that of CS2023 Dataset, i.e.1364, raising the computational load and subsequently making the GPT model more prone to distractions.",
+      "page": 10,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 99.14897155761719,
+        "x2": 502.8237609863281,
+        "y2": 118.7020263671875
+      }
+    }]
+  }, {
+    "title": {
+      "text": "5 CONCLUSIONS AND FUTUREWORK",
+      "page": 10,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 140.37872314453125,
+        "x2": 242.959716796875,
+        "y2": 146.16204833984375
+      }
+    },
+    "paragraphs": [{
+      "text": "In this paper, we introduced an open-source Multi-Modal Automated Academic Paper Interpretation System (MMAPIS), comprising three integrated modules: (1) Hybrid Modality Preprocessing and Alignment Module; (2) Hierarchical Discourse-Aware Summarization Module; (3) Diverse Multimodal User Interface Module. Compared with existing works, our system adeptly harnesss the multimodal information in academic papers through hybrid modality preprocessing. Moreover, the hierarchical discourse-aware summarization method via LLMs with special prompts ensures that essential information across various sections of lengthy scientific texts is accurately captured and retained. Additionally, the system’s diverse range ofmultimodal user interfaces enhances the accessibility and utility for both readers and developers. We demonstrate the efficacy and superiority of our system through qualitative demonstrations and quantitative analyses. In the future, we aim to further augment our system’s capabilities, focusing on advanced integrations and optimizations. While our current design already addresses key challenges in academic paper interpretation, we recognize the potential for incorporating a broader spectrum of external knowledge and inter-document connections. This enhancement will facilitate a more nuanced understanding of academic content, especially in relation to user-specific contexts and profiles. Additionally, we are dedicated to refining the efficiency and responsiveness of our system. Our goal is to transition from primarily offline processing to more dynamic, real-time interpretations, thereby broadening the system’s applicability.",
+      "page": 10,
+      "region": {
+        "x1": 73.01000213623047,
+        "y1": 157.42991638183594,
+        "x2": 503.21954345703125,
+        "y2": 341.36700439453125
+      }
+    }]
+  }, {
+    "title": {
+      "text": "REFERENCES",
+      "page": 10,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 363.0436706542969,
+        "x2": 129.92933654785156,
+        "y2": 368.8269958496094
+      }
+    },
+    "paragraphs": [{
+      "text": "[1] Griffin Adams, Alexander Fabbri, Faisal Ladhak, Eric Lehman, and Noémie Elhadad. 2023. From sparse to dense: GPT-4 summarization with chain of",
+      "page": 10,
+      "region": {
+        "x1": 76.68400573730469,
+        "y1": 377.66009521484375,
+        "x2": 501.8408203125,
+        "y2": 382.2139892578125
+      }
+    }, {
+      "text": "density prompting. arXiv preprint arXiv:2309.04269 (2023). [2] Nouf Ibrahim Altmami and Mohamed El Bachir Menai. 2022. Automatic summarization of scientific articles: A survey. Journal of King Saud",
+      "page": 10,
+      "region": {
+        "x1": 76.68399047851562,
+        "y1": 387.62310791015625,
+        "x2": 501.83929443359375,
+        "y2": 402.1390075683594
+      }
+    }, {
+      "text": "University-Computer and Information Sciences 34, 4 (2022), 1011–1028. [3] Iz Beltagy, Matthew E Peters, and Arman Cohan. 2020. Longformer: The long-document transformer. arXiv preprint arXiv:2004.05150 (2020). [4] Manik Bhandari, Pranav Gour, Atabak Ashfaq, Pengfei Liu, and Graham Neubig. 2020. Re-evaluating evaluation in text summarization. arXiv",
+      "page": 10,
+      "region": {
+        "x1": 76.68399047851562,
+        "y1": 407.548095703125,
+        "x2": 501.83831787109375,
+        "y2": 432.0270080566406
+      }
+    }, {
+      "text": "preprint arXiv:2010.07100 (2020). [5] Sumit Bhatia and Prasenjit Mitra. 2012. Summarizing figures, tables, and algorithms in scientific publications to augment search results. ACM",
+      "page": 10,
+      "region": {
+        "x1": 76.68399810791016,
+        "y1": 437.43609619140625,
+        "x2": 501.8406982421875,
+        "y2": 451.9530029296875
+      }
+    }, {
+      "text": "Transactions on Information Systems (TOIS) 30, 1 (2012), 1–24. [6] Lukas Blecher, Guillem Cucurull, Thomas Scialom, and Robert Stojnic. 2023. Nougat: Neural optical understanding for academic documents. arXiv",
+      "page": 10,
+      "region": {
+        "x1": 76.68400573730469,
+        "y1": 457.3611145019531,
+        "x2": 501.8391418457031,
+        "y2": 471.8780212402344
+      }
+    }, {
+      "text": "preprint arXiv:2308.13418 (2023). [7] Arun Tejasvi Chaganty, Stephen Mussman, and Percy Liang. 2018. The price of debiasing automatic metrics in natural language evaluation. arXiv",
+      "page": 10,
+      "region": {
+        "x1": 76.68400573730469,
+        "y1": 477.2861022949219,
+        "x2": 501.8389892578125,
+        "y2": 491.8030090332031
+      }
+    }, {
+      "text": "preprint arXiv:1807.02202 (2018). [8] Yukang Chen, Shengju Qian, Haotian Tang, Xin Lai, Zhijian Liu, Song Han, and Jiaya Jia. 2023. LongLoRA: Efficient Fine-tuning of Long-Context",
+      "page": 10,
+      "region": {
+        "x1": 76.68399810791016,
+        "y1": 497.21209716796875,
+        "x2": 501.8346252441406,
+        "y2": 511.7279968261719
+      }
+    }, {
+      "text": "Large Language Models. arXiv:2309.12307 [cs.CL] [9] Christopher Clark and Santosh Divvala. 2016. Pdffigures 2.0: Mining figures from research papers. In Proceedings of the 16th ACM/IEEE-CS on Joint",
+      "page": 10,
+      "region": {
+        "x1": 76.68399810791016,
+        "y1": 517.1371459960938,
+        "x2": 501.8393249511719,
+        "y2": 531.654052734375
+      }
+    }, {
+      "text": "Conference on Digital Libraries. 143–152. [10] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2018. Bert: Pre-training of deep bidirectional transformers for language",
+      "page": 10,
+      "region": {
+        "x1": 73.44100189208984,
+        "y1": 537.0620727539062,
+        "x2": 501.83837890625,
+        "y2": 551.5789794921875
+      }
+    }, {
+      "text": "understanding. arXiv preprint arXiv:1810.04805 (2018). [11] Wafaa S El-Kassas, Cherif R Salama, Ahmed A Rafea, and Hoda K Mohamed. 2021. Automatic text summarization: A comprehensive survey. Expert",
+      "page": 10,
+      "region": {
+        "x1": 73.44100952148438,
+        "y1": 556.9880981445312,
+        "x2": 501.83795166015625,
+        "y2": 571.5040283203125
+      }
+    }, {
+      "text": "systems with applications 165 (2021), 113679. [12] Sebastian Gehrmann, Yuntian Deng, and Alexander M Rush. 2018. Bottom-up abstractive summarization. arXiv preprint arXiv:1808.10792 (2018). [13] Tatsunori B Hashimoto, Hugh Zhang, and Percy Liang. 2019. Unifying human and statistical evaluation for natural language generation. arXiv",
+      "page": 10,
+      "region": {
+        "x1": 73.44097900390625,
+        "y1": 576.9130859375,
+        "x2": 501.8389892578125,
+        "y2": 601.3919677734375
+      }
+    }, {
+      "text": "preprint arXiv:1904.02792 (2019). [14] Junxian He, Wojciech Kryściński, Bryan McCann, Nazneen Rajani, and Caiming Xiong. 2020. Ctrlsum: Towards generic controllable text summa-",
+      "page": 10,
+      "region": {
+        "x1": 73.44099426269531,
+        "y1": 606.8010864257812,
+        "x2": 503.0197448730469,
+        "y2": 621.3170166015625
+      }
+    }, {
+      "text": "rization. arXiv preprint arXiv:2012.04281 (2020). [15] Anandini Hetami et al. 2015. Perancangan Information Retrieval (IR) Untuk Pencarian Ide Pokok Teks Artikel Berbahasa Inggris dengn Pembobotan",
+      "page": 10,
+      "region": {
+        "x1": 73.44100952148438,
+        "y1": 626.7261352539062,
+        "x2": 501.8387145996094,
+        "y2": 641.2429809570312
+      }
+    }, {
+      "text": "Vector Space Model. Jurnal Ilmiah Teknologi Informasi Asia 9, 1 (2015), 53–59.",
+      "page": 10,
+      "region": {
+        "x1": 88.64700317382812,
+        "y1": 646.651123046875,
+        "x2": 309.3233642578125,
+        "y2": 651.2050170898438
+      }
+    }, {
+      "text": "[16] Huan Yee Koh, Jiaxin Ju, Ming Liu, and Shirui Pan. 2022. An empirical survey on long document summarization: Datasets, models, and metrics. ACM computing surveys 55, 8 (2022), 1–35. [17] Wojciech Kryściński, Nitish Shirish Keskar, Bryan McCann, Caiming Xiong, and Richard Socher. 2019. Neural text summarization: A critical evaluation. arXiv preprint arXiv:1908.08960 (2019). [18] Nelson F Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, and Percy Liang. 2023. Lost in the middle: How language models use long contexts. arXiv preprint arXiv:2307.03172 (2023). [19] Rui Meng, Khushboo Thaker, Lei Zhang, Yue Dong, Xingdi Yuan, Tong Wang, and Daqing He. 2021. Bringing structure into summaries: a faceted summarization dataset for long scientific documents. arXiv preprint arXiv:2106.00130 (2021). [20] Romain Paulus, Caiming Xiong, and Richard Socher. 2017. A deep reinforced model for abstractive summarization. arXiv preprint arXiv:1705.04304 (2017). [21] Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, and Peter J Liu. 2020. Exploring the limits of transfer learning with a unified text-to-text transformer. The Journal of Machine Learning Research 21, 1 (2020), 5485–5551. [22] Abigail See, Peter J Liu, and Christopher D Manning. 2017. Get to the point: Summarization with pointer-generator networks. arXiv preprint arXiv:1704.04368 (2017). [23] Cepi Slamet, AR Atmadja, DS Maylawati, RS Lestari, Wahyudin Darmalaksana, and Muhammad Ali Ramdhani. 2018. Automated text summarization for indonesian article using vector space model. In IOP Conference Series: Materials Science and Engineering, Vol. 288. IOP Publishing, 012037. [24] Edward Sun, Yufang Hou, Dakuo Wang, Yunfeng Zhang, and Nancy XR Wang. 2021. D2S: Document-to-slide generation via query-based text summarization. arXiv preprint arXiv:2105.03664 (2021). [25] Simone Teufel and Marc Moens. 2002. Summarizing scientific articles: experiments with relevance and rhetorical status. Computational linguistics 28, 4 (2002), 409–445. [26] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. Advances in neural information processing systems 30 (2017). [27] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. 2022. Chain-of-thought prompting elicits reasoning in large language models. Advances in Neural Information Processing Systems 35 (2022), 24824–24837. [28] Chien-Sheng Wu, Linqing Liu, Wenhao Liu, Pontus Stenetorp, and Caiming Xiong. 2021. Controllable abstractive dialogue summarization with sketch supervision. arXiv preprint arXiv:2105.14064 (2021). [29] Shansong Yang,Weiming Lu, Zhanjiang Zhang, BaogangWei, andWenjia An. 2016. Amplifying scientific paper’s abstract by leveraging data-weighted reconstruction. Information Processing & Management 52, 4 (2016), 698–719. [30] Manzil Zaheer, Guru Guruganesh, Kumar Avinava Dubey, Joshua Ainslie, Chris Alberti, Santiago Ontanon, Philip Pham, Anirudh Ravula, Qifan Wang, Li Yang, et al. 2020. Big bird: Transformers for longer sequences. Advances in neural information processing systems 33 (2020), 17283–17297. [31] Jingqing Zhang, Yao Zhao, Mohammad Saleh, and Peter Liu. 2020. Pegasus: Pre-training with extracted gap-sentences for abstractive summarization. In International Conference on Machine Learning. PMLR, 11328–11339.",
+      "page": 11,
+      "region": {
+        "x1": 110.16098022460938,
+        "y1": 100.45013427734375,
+        "x2": 539.634765625,
+        "y2": 413.8450012207031
+      }
+    }, {
+      "text": "APPENDIX",
+      "page": 11,
+      "region": {
+        "x1": 110.1610107421875,
+        "y1": 433.7786865234375,
+        "x2": 155.01092529296875,
+        "y2": 439.56201171875
+      }
+    }, {
+      "text": "In Figure 4, we present various examples of thoughtfully designed prompts. These include a quantifiable evaluation with GPT-4 situated at the upper left, a summary section signified by an introduction exemplar at the lower left, an illustration of application generation, specifically blog interpretation, in the central portion, while showcasing regeneration leveraging CoD technology towards the right.",
+      "page": 11,
+      "region": {
+        "x1": 109.8290023803711,
+        "y1": 450.8299255371094,
+        "x2": 539.5502319335938,
+        "y2": 497.781005859375
+      }
+    }, {
+      "text": "The process of generating section summaries or applications for downstream use is steered by the CoT, which directs the introspective evaluation and ongoing refinement of the GPT. This process consists of three distinct steps: (1) Draft generation, (2) Self-review based on pre-determined parameters, and (3) Refinement to generate the final outcome. The main emphasis in this procedure is on fluency, authenticity, and integrity.",
+      "page": 11,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 505.6239318847656,
+        "x2": 538.5587768554688,
+        "y2": 552.5750122070312
+      }
+    }, {
+      "text": "On the other hand, at the integration stage or regeneration, the CoD is implemented in an identical workflow. However, the principal aim here is to limit the loss of entity-specific information. During the evaluation phase, we have adopted the methods discussed by Adams et al. [1] , using GPT-4 as proxy to rate performance across five dimensions: Informativeness, Quality, Coherence, Attribution, and Overall Impact.",
+      "page": 11,
+      "region": {
+        "x1": 110.16100311279297,
+        "y1": 560.4189453125,
+        "x2": 539.9401245117188,
+        "y2": 607.3699951171875
+      }
+    }]
+  }]
+}

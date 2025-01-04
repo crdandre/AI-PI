@@ -2,7 +2,9 @@
 Extracts:
 - Document Info, Sections
 - Existing comments
-- Images, Tables
+- Images(+Image Paths), Tables
+
+Output:
 """
 
 from lxml import etree
@@ -201,34 +203,8 @@ def clean_xml_and_b64(text: str) -> str:
 
 def extract_tables(tree: etree.Element, namespace: Dict[str, str], position_counter: int) -> List[TableData]:
     """Extract tables from the document."""
-    tables = []
-    
-    for element in tree.iter(f'{{{namespace["w"]}}}tbl'):
-        rows = []
-        for row in element.iter(f'{{{namespace["w"]}}}tr'):
-            cells = []
-            for cell in row.iter(f'{{{namespace["w"]}}}tc'):
-                cell_text = clean_xml_and_b64(''.join(cell.itertext()).strip())
-                cells.append(cell_text)
-            rows.append(cells)
-        
-        # Find and clean caption if exists
-        caption = None
-        prev = element.getprevious()
-        if prev is not None and prev.tag == f'{{{namespace["w"]}}}p':
-            caption_text = ''.join(prev.itertext())
-            if caption_text.lower().startswith('table'):
-                caption = clean_xml_and_b64(caption_text)
-
-        table_data = {
-            'id': f'table_{len(tables)}',
-            'content': rows,
-            'position': {'start': position_counter, 'end': position_counter},
-            'caption': caption
-        }
-        tables.append(table_data)
-    
-    return tables
+    # Placeholder for table extraction
+    return []
 
 
 def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[str, str], 
@@ -356,45 +332,66 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
         }
 
-        # Build full text with formatting
+        # Build full text with heading level tracking
         full_text = []
-        current_formatting = {}
+        current_section = {'level': 0, 'start': 0, 'text': ''}
+        sections = []
         
         for element in tree.iter():
             if element.tag == f'{{{namespace["w"]}}}p':  # Paragraph
-                # Always add paragraph breaks
-                full_text.append('\n')
+                # Check for heading style
+                style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
+                heading_level = 0
                 
-                if include_formatting:
-                    # Check if this is a heading
-                    style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
-                    if style_element is not None:
-                        style = style_element.get(f'{{{namespace["w"]}}}val')
-                        if style == 'Heading1' or any(section_name.lower() in ''.join(element.itertext()).lower() 
-                                                     for section_name in ['abstract', 'introduction', 'methods', 
-                                                                        'results', 'discussion', 'conclusion']):
-                            current_formatting['heading'] = 1
-                            full_text[-1] = f"\n# "  # Replace last newline with markdown heading
+                if style_element is not None:
+                    style = style_element.get(f'{{{namespace["w"]}}}val')
+                    # Extract heading level from style (Heading1, Heading2, etc.)
+                    if style and style.lower().startswith('heading'):
+                        try:
+                            heading_level = int(style[-1])
+                        except ValueError:
+                            heading_level = 0
+                
+                # If we found a heading
+                if heading_level > 0:
+                    # Store previous section if it exists
+                    if current_section['text']:
+                        sections.append({
+                            'type': f'level_{current_section["level"]}',
+                            'text': current_section['text'].strip(),
+                            'match_strings': {
+                                'start': current_section['text'].split('\n')[0],
+                                'end': current_section['text'].split('\n')[-1]
+                            }
+                        })
                     
-            elif element.tag == f'{{{namespace["w"]}}}r':  # Run
-                # Check for text formatting only if enabled
-                if include_formatting:
-                    rPr = element.find(f'.//{{{namespace["w"]}}}rPr', namespace)
-                    if rPr is not None:
-                        if rPr.find(f'.//{{{namespace["w"]}}}b', namespace) is not None:
-                            current_formatting['bold'] = True
-                        if rPr.find(f'.//{{{namespace["w"]}}}i', namespace) is not None:
-                            current_formatting['italic'] = True
+                    # Start new section
+                    current_section = {
+                        'level': heading_level,
+                        'start': len(''.join(full_text)),
+                        'text': ''
+                    }
+                    
+                    # Add markdown heading markers
+                    full_text.append(f"\n{'#' * heading_level} ")
+                else:
+                    full_text.append('\n')
                 
             elif element.tag == f'{{{namespace["w"]}}}t':  # Text
                 text = element.text if element.text else ''
-                if include_formatting:
-                    if current_formatting.get('bold'):
-                        text = f"**{text}**"
-                    if current_formatting.get('italic'):
-                        text = f"*{text}*"
                 full_text.append(text)
-                current_formatting = {}  # Reset formatting after applying
+                current_section['text'] += text
+        
+        # Add final section
+        if current_section['text']:
+            sections.append({
+                'type': f'level_{current_section["level"]}',
+                'text': current_section['text'].strip(),
+                'match_strings': {
+                    'start': current_section['text'].split('\n')[0],
+                    'end': current_section['text'].split('\n')[-1]
+                }
+            })
         
         full_text = ''.join(full_text)
         # Remove multiple newlines
