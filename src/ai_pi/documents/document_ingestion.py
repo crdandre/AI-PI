@@ -172,29 +172,33 @@ def clean_citations(text: str) -> str:
     
     return text.strip()
 
-def clean_citation_manager_text(text: str) -> str:
-    # Remove ADDIN EN.CITE and similar tags
-    text = re.sub(r'ADDIN EN\.CITE\.?[A-Z]*', '', text)
+def clean_xml_and_b64(text: str) -> str:
+    """Remove XML tags, base64 content, and other non-content markup from text."""
+    # Remove any XML/HTML-like tags and their contents
+    text = re.sub(r'<[^>]+>.*?</[^>]+>', '', text)
     
-    # Remove base64 encoded EndNote XML data - these often appear between ADDIN tags
-    text = re.sub(r'[A-Za-z0-9+/=\n]{100,}', '', text)
+    # Remove standalone XML/HTML-like tags
+    text = re.sub(r'<[^>]+/?>', '', text)
     
-    # Remove any remaining EndNote XML tags
-    text = re.sub(r'<EndNote>.*?</EndNote>', '', text)
+    # Remove base64 encoded data and long strings of encoded characters
+    text = re.sub(r'[A-Za-z0-9+/=\n]{50,}', '', text)
     
-    # Clean up citation brackets while preserving numbers
-    # This keeps citations like [22, 36] but removes extra EndNote formatting
+    # Remove EndNote and similar reference manager tags
+    text = re.sub(r'ADDIN\s+[A-Z.]+(?:\s*\{[^}]*\})?', '', text)
+    text = re.sub(r'SEQ\s+(?:Table|Figure)\s*\\[^"]*', '', text)
+    
+    # Clean up citation brackets while preserving simple numeric citations
     citations = re.findall(r'\[[\d\s,]+\]', text)
-    clean_text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'\[.*?\]', '', text)
     
-    # Add back essential citations
+    # Add back simple numeric citations
     if citations:
-        clean_text = clean_text.strip() + ' ' + ' '.join(citations)
+        text = text.strip() + ' ' + ' '.join(citations)
     
-    # Remove multiple spaces and trim
-    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    # Remove multiple spaces, newlines and trim
+    text = re.sub(r'\s+', ' ', text).strip()
     
-    return clean_text
+    return text
 
 
 def extract_tables(tree: etree.Element, namespace: Dict[str, str], position_counter: int) -> List[TableData]:
@@ -206,17 +210,17 @@ def extract_tables(tree: etree.Element, namespace: Dict[str, str], position_coun
         for row in element.iter(f'{{{namespace["w"]}}}tr'):
             cells = []
             for cell in row.iter(f'{{{namespace["w"]}}}tc'):
-                cell_text = clean_citation_manager_text(''.join(cell.itertext()).strip())
+                cell_text = clean_xml_and_b64(''.join(cell.itertext()).strip())
                 cells.append(cell_text)
             rows.append(cells)
         
-        # Find caption if exists
+        # Find and clean caption if exists
         caption = None
         prev = element.getprevious()
         if prev is not None and prev.tag == f'{{{namespace["w"]}}}p':
             caption_text = ''.join(prev.itertext())
             if caption_text.lower().startswith('table'):
-                caption = caption_text
+                caption = clean_xml_and_b64(caption_text)
 
         table_data = {
             'id': f'table_{len(tables)}',
@@ -268,13 +272,23 @@ def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[s
                         # Extract image data
                         image_data = docx.read(f'word/{image_path}')
                         
-                        # Convert to JPEG
+                        # Convert to JPEG with white background
                         try:
                             # Open image using PIL
                             img = Image.open(io.BytesIO(image_data))
                             
-                            # Convert to RGB if necessary
+                            # Create a white background image
+                            white_bg = Image.new('RGB', img.size, (255, 255, 255))
+                            
+                            # If image has transparency (RGBA or P mode)
                             if img.mode in ('RGBA', 'P'):
+                                # Paste the image onto white background using alpha channel as mask
+                                if img.mode == 'P':
+                                    img = img.convert('RGBA')
+                                white_bg.paste(img, mask=img.split()[3])
+                                img = white_bg
+                            else:
+                                # If no transparency, just convert to RGB
                                 img = img.convert('RGB')
                             
                             # Generate image filename
@@ -295,7 +309,7 @@ def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[s
                         if next_elem is not None and next_elem.tag == f'{{{namespace["w"]}}}p':
                             caption_text = ''.join(next_elem.itertext())
                             if caption_text.lower().startswith('figure'):
-                                caption = caption_text
+                                caption = clean_xml_and_b64(caption_text)
 
                         image_info = {
                             'id': image_id,
@@ -315,69 +329,15 @@ def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[s
     return images
 
 
-def parse_references(text: str) -> List[Dict[str, str]]:
-    """Parse reference text into structured format."""
-    # Split text into individual references
-    raw_refs = re.split(r'\n(?=\d+\.)', text.strip())
-    
-    parsed_refs = []
-    for ref in raw_refs:
-        if not ref.strip():
-            continue
-            
-        # Extract reference number and content
-        match = re.match(r'(\d+)\.(.*)', ref.strip())
-        if not match:
-            continue
-            
-        ref_num, content = match.groups()
-        
-        # Parse authors, title, and publication info
-        # Look for italicized title between * characters
-        title_match = re.search(r'\*(.*?)\*', content)
-        title = title_match.group(1) if title_match else ""
-        
-        # Remove title from content to parse other parts
-        if title:
-            content = content.replace(f"*{title}*", "")
-        
-        # Extract DOI if present
-        doi_match = re.search(r'DOI:\s*([\S]+)', content)
-        doi = doi_match.group(1) if doi_match else None
-        
-        # Extract year if present
-        year_match = re.search(r'\b(19|20)\d{2}\b', content)
-        year = year_match.group(0) if year_match else None
-        
-        # Extract authors (everything before the title)
-        authors = content.split(title)[0].strip() if title else ""
-        authors = authors.strip(' .,')
-        
-        parsed_refs.append({
-            "number": ref_num,
-            "authors": authors,
-            "title": title,
-            "year": year,
-            "doi": doi,
-            "raw": ref.strip()
-        })
-    
-    return parsed_refs
-
-
 def extract_section_text(full_text: str, start_match: str, end_match: str, section_type: str = None) -> Union[str, List[Dict[str, str]]]:
     """Helper function to extract text between start and end match strings."""
     try:
         start_idx = full_text.index(start_match)
         end_idx = full_text.index(end_match) + len(end_match)
         text = full_text[start_idx:end_idx].strip()
-        
-        # If this is a References section, parse it
-        if section_type == "References":
-            return parse_references(text)
         return text
     except ValueError:
-        return "" if section_type != "References" else []
+        return ""
 
 
 def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False, include_formatting: bool = True) -> Union[Dict, str]:
@@ -642,7 +602,8 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
+    # document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
+    document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')

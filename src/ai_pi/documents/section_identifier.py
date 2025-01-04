@@ -36,7 +36,7 @@ class SingleContextSectionIdentifier:
                     
                     Requirements:
                     - Each section should have a section_type (like Abstract, Introduction, Methods, Results). Abstract subsections don't count, nor do any other section names such as "Limitations" etc. Only stick to main well-known section names - think about what you know about likely academic paper section names and assess+include accordingly. References DO count, and should be included.
-                    - Each section should contain match strings (start, end), containing the first and last three words in each section for text matching
+                    - Each section should contain match strings (start, end), containing the first and last five-ish words in each section for text matching
                     - Ensure the output is parseable as json (i.e. clean extra newline characters, spaces, etc.!!!!!!!
                     - Maintain the original order of sections
                     - Do not deviate from the wording given in the input text
