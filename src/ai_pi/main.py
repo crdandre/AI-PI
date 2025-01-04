@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from ai_pi.workflow2 import PaperReview
+from ai_pi.workflow import PaperReview
 from llama_index.llms.openai import OpenAI
 import dspy
 import os

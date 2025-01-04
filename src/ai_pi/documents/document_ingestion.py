@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
 import dspy
+import json
 
 class Revision(TypedDict):
     id: str
@@ -177,11 +178,14 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
                 style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
                 if style_element is not None:
                     style = style_element.get(f'{{{namespace["w"]}}}val')
-                    if style == 'Heading1':  # Only preserve Heading1
+                    if style == 'Heading1' or any(section_name.lower() in ''.join(element.itertext()).lower() 
+                                                 for section_name in ['abstract', 'introduction', 'methods', 
+                                                                    'results', 'discussion', 'conclusion']):
                         current_formatting['heading'] = 1
                         full_text.append(f"\n# ")  # Markdown-style heading
                     else:
                         current_formatting.pop('heading', None)
+                        full_text.append('\n')  # Regular paragraph break
                 else:
                     current_formatting.pop('heading', None)
                     full_text.append('\n')  # New paragraph
@@ -214,14 +218,13 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         # Initialize document history
         document_history = {
             'document_id': file_path,
-            'revisions': [],
-            'comments': [],
             'metadata': {
                 'last_modified': None,
-                'revision_count': 0,
-                'comment_count': 0,
                 'contributors': set()
-            }
+            },
+            'sections': [],
+            'comments': [],
+            'revisions': []
         }
 
         # First, find all comment reference marks and their positions
@@ -259,7 +262,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
                 
                 # Extract formatting information
                 formatting = {}
-                for child in element.iter():
+                for child in element:
                     if child.tag == '{%s}rPr' % namespace['w']:  # Run properties
                         for prop in child:
                             formatting[prop.tag.split('}')[-1]] = True
@@ -343,8 +346,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             pass
 
         # Update metadata
-        document_history['metadata']['revision_count'] = len(document_history['revisions'])
-        document_history['metadata']['comment_count'] = len(document_history['comments'])
+        document_history['metadata']['last_modified'] = None
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
         # After extracting full_text, identify sections
@@ -360,53 +362,33 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         # # Add sections to document_history
         document_history['sections'] = sections
         
-        # Update formatting to include section information
-        formatted_text = []
-        formatted_text.append("=== DOCUMENT METADATA ===")
-        formatted_text.append(f"Document ID: {document_history['document_id']}")
-        formatted_text.append(f"Last Modified: {document_history['metadata']['last_modified']}")
-        formatted_text.append(f"Contributors: {', '.join(document_history['metadata']['contributors'])}\n")
-        
-        formatted_text.append("=== DOCUMENT CONTENT ===")
-        formatted_text.append(full_text)
-        formatted_text.append("\n")
-        
-        if document_history['comments']:
-            formatted_text.append("=== COMMENTS ===")
-            for comment in document_history['comments']:
-                formatted_text.append(prepare_comment_text(comment))
-                formatted_text.append("\n")
-        
-        if document_history['revisions']:
-            formatted_text.append("=== REVISIONS ===")
-            for revision in document_history['revisions']:
-                formatted_text.append(prepare_revision_text(revision))
-                formatted_text.append("\n")
-        
-        formatted_text.append("=== DOCUMENT SECTIONS ===")
-        for section in sections:
-            formatted_text.append(f"\n=== {section['type'].upper()} ===")
-            formatted_text.append(section['text'])
-        
-        formatted_text = "\n".join(formatted_text)
-        
+        # Create clean document structure
+        document_history = {
+            'document_id': document_history['document_id'],
+            'metadata': {
+                'last_modified': document_history['metadata']['last_modified'],
+                'contributors': document_history['metadata']['contributors']
+            },
+            'sections': [{
+                'type': section['type'],
+                'text': section['text'],
+                'match_strings': section['match_strings']
+            } for section in sections],
+            'comments': document_history['comments'],
+            'revisions': document_history['revisions']
+        }
+
+        # Write to file if requested
         if write_to_file:
-            # Create processed_documents directory if it doesn't exist
-            output_dir = Path('processed_documents')
-            output_dir.mkdir(exist_ok=True)
-            
-            # Generate base filename from input file
             base_filename = Path(file_path).stem
-            output_file = output_dir / f"{base_filename}_processed.txt"
+            output_file = output_dir / f"{base_filename}_processed.json"
             
-            # Write formatted text to file
             with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(formatted_text)
+                json.dump(document_history, f, indent=4)
             
             print(f"File written to: {output_file.absolute()}")
-            return document_history
         
-        return formatted_text
+        return document_history
     
 
 def extract_section_text(full_text: str, start_match: str, end_match: str) -> str:
@@ -432,11 +414,10 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=True, lm=lm)
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
     processed_file = output_dir / f"ScolioticFEPaper_v7_processed2.txt"
-    print(f"\nProcessed file saved as: {processed_file.absolute()}")
     
     print(json.dumps(document_history, indent=4))

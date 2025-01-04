@@ -21,7 +21,6 @@ dependencies = [
     "python-dotenv ~= 1.0.1",
     "llama-index-core",
     "llama-index-readers-file",
-    "llama-index-llms-nvidia", 
     "llama-index-llms-openai",
     "llama-index-llms-ollama",
     "llama-index-llms-openrouter",

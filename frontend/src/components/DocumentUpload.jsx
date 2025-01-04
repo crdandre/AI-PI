@@ -14,11 +14,7 @@ import {
 import axios from 'axios';
 import { CheckIcon } from '@chakra-ui/icons';
 
-const apiHost = 'localhost';
-const apiPort = 8001;
-const apiUrl = `http://${apiHost}:${apiPort}`;
-
-export const DocumentUpload = ({ onDocumentProcessed }) => {
+export const DocumentUpload = ({ onDocumentProcessed, onApiStatusChange, onApiUrlChange }) => {
   const [file, setFile] = useState(null);
   const [model, setModel] = useState('gpt-4o-mini');
   const [isUploading, setIsUploading] = useState(false);
@@ -30,6 +26,9 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
   const [apiConnected, setApiConnected] = useState(false);
   const [testMode, setTestMode] = useState(false);
   const toast = useToast();
+  const [apiHost, setApiHost] = useState('localhost');
+  const [apiPort, setApiPort] = useState(8001);
+  const apiUrl = `http://${apiHost}:${apiPort}`;
 
   // Check API connection on component mount
   useEffect(() => {
@@ -51,6 +50,8 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
         
         if (response.data && (response.status === 200 || response.status === 201)) {
           setApiConnected(true);
+          onApiStatusChange(true);
+          onApiUrlChange(apiUrl);
           toast.closeAll();
         } else {
           throw new Error('API returned unexpected response');
@@ -75,6 +76,8 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
         });
         
         setApiConnected(false);
+        onApiStatusChange(false);
+        onApiUrlChange(apiUrl);
         
         if (!toast.isActive('api-error')) {
           toast({
@@ -92,7 +95,7 @@ export const DocumentUpload = ({ onDocumentProcessed }) => {
     checkApiConnection();
     const interval = setInterval(checkApiConnection, 60000);
     return () => clearInterval(interval);
-  }, [toast]);
+  }, [toast, apiUrl, onApiStatusChange, onApiUrlChange]);
 
   const handleUpload = async (file) => {
     setIsUploading(true);
