@@ -4,6 +4,7 @@ import logging
 import json
 import re
 from json.decoder import JSONDecodeError
+from .text_utils import normalize_unicode, clean_markdown
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
@@ -72,15 +73,7 @@ class SingleContextSectionIdentifier:
         self.section_predictor = dspy.ChainOfThought(DocumentSections)
     
     def _clean_markdown(self, text: str) -> str:
-        """Remove bold/italic formatting but preserve headers and handle Unicode characters."""
-        # First handle common Unicode characters
-        text = text.replace('\u00b0', '°')  # Degree symbol
-        text = text.replace('\u00b1', '±')  # Plus-minus symbol
-        
-        # Then handle markdown formatting
-        text = re.sub(r'(?<![#])\*\*(.+?)\*\*', r'\1', text)  # Remove bold not preceded by #
-        text = re.sub(r'(?<![#])\*(.+?)\*', r'\1', text)      # Remove italic not preceded by #
-        return text
+        return clean_markdown(text)
 
     def _identify_document_structure(self, text: str) -> List[Dict]:
         """First pass: Identify all headings and their levels with line numbers."""
@@ -158,6 +151,8 @@ class SingleContextSectionIdentifier:
     def process_document(self, text: str) -> List[Dict]:
         """Process document using heading positions to determine section boundaries."""
         try:
+            # Normalize Unicode in input text
+            text = normalize_unicode(text)
             lines = text.splitlines()
             
             # First pass: get document structure with line numbers
@@ -180,8 +175,8 @@ class SingleContextSectionIdentifier:
                 else:
                     end_line = len(lines)  # Last section goes to end of file
                 
-                # Get section text
-                section_text = '\n'.join(lines[start_line:end_line]).strip()
+                # Get section text and normalize Unicode
+                section_text = normalize_unicode('\n'.join(lines[start_line:end_line]).strip())
                 
                 with dspy.context(lm=self.engine):
                     prompt = f"""Given this section from an academic paper, extract the exact beginning and ending text.
@@ -201,19 +196,17 @@ Return the exact text snippets found in the section."""
                     result = self.section_predictor(text=section_text)
                     
                     try:
-                        # Directly use the start_text and end_text fields
-                        match_strings = {
-                            'start': str(result.start_text).strip(),
-                            'end': str(result.end_text).strip()
-                        }
-                        
+                        # Create section info with normalized text
                         section_info = {
-                            'section_type': heading['section_type'],  # Use the heading's section type
-                            'match_strings': match_strings
+                            'section_type': heading['section_type'],
+                            'match_strings': {
+                                'start': normalize_unicode(str(result.start_text).strip()),
+                                'end': normalize_unicode(str(result.end_text).strip())
+                            },
+                            'text': normalize_unicode(section_text)  # Add normalized full text
                         }
                         processed_sections.append(section_info)
-
-                            
+                        
                     except Exception as e:
                         logger.warning(f"Failed to process section {heading['section_type']}: {str(e)}")
                         logger.debug("Exception details:", exc_info=True)

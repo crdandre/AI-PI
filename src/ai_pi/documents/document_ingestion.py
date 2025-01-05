@@ -18,9 +18,15 @@ from datetime import datetime
 import os
 import pypandoc
 import logging
+import unicodedata
 
 from src.ai_pi.documents.marker_extract_from_pdf import PDFTextExtractor
 from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
+from .text_utils import (
+    normalize_unicode,
+    clean_citations,
+    clean_xml_and_b64
+)
 
 
 class Revision(TypedDict):
@@ -148,51 +154,6 @@ def prepare_revision_text(revision: Dict) -> str:
     if revision.get('parent_id'):
         text += f"\nParent Revision: {revision['parent_id']}"
         
-    return text
-
-
-def clean_citations(text: str) -> str:
-    """Remove citations and references section from text while preserving readability."""
-    # Remove the References section and everything after it
-    if 'References' in text:
-        text = text.split('References')[0]
-    # Remove parenthetical citations like (Smith et al., 2020)
-    text = re.sub(r'\([^()]*?\d{4}[^()]*?\)', '', text)
-    # Remove numbered citations like [1] or [1,2,3]
-    text = re.sub(r'\[\d+(?:,\s*\d+)*\]', '', text)
-    # Remove multiple spaces created by citation removal
-    text = re.sub(r'\s+', ' ', text)
-    # Fix spacing around punctuation
-    text = re.sub(r'\s+([.,;:])', r'\1', text)
-    
-    return text.strip()
-
-def clean_xml_and_b64(text: str) -> str:
-    """Remove XML tags, base64 content, and other non-content markup from text."""
-    # Remove any XML/HTML-like tags and their contents
-    text = re.sub(r'<[^>]+>.*?</[^>]+>', '', text)
-    
-    # Remove standalone XML/HTML-like tags
-    text = re.sub(r'<[^>]+/?>', '', text)
-    
-    # Remove base64 encoded data and long strings of encoded characters
-    text = re.sub(r'[A-Za-z0-9+/=\n]{50,}', '', text)
-    
-    # Remove EndNote and similar reference manager tags
-    text = re.sub(r'ADDIN\s+[A-Z.]+(?:\s*\{[^}]*\})?', '', text)
-    text = re.sub(r'SEQ\s+(?:Table|Figure)\s*\\[^"]*', '', text)
-    
-    # Clean up citation brackets while preserving simple numeric citations
-    citations = re.findall(r'\[[\d\s,]+\]', text)
-    text = re.sub(r'\[.*?\]', '', text)
-    
-    # Add back simple numeric citations
-    if citations:
-        text = text.strip() + ' ' + ' '.join(citations)
-    
-    # Remove multiple spaces, newlines and trim
-    text = re.sub(r'\s+', ' ', text).strip()
-    
     return text
 
 
@@ -426,23 +387,48 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
                 document_history['sections'] = []
                 return document_history
             
-            # Add the text content to each section
+            # Process sections
+            processed_sections = []
+            
             for section in sections:
                 try:
-                    start_match = section['match_strings']['start']
-                    end_match = section['match_strings']['end']
-                    section['text'] = extract_section_text(
-                        full_text, 
-                        start_match, 
-                        end_match,
-                        section_type=section['type']
-                    )
+                    # Normalize all text fields in the section
+                    processed_section = {
+                        'section_type': section['section_type'],
+                        'match_strings': {
+                            'start': normalize_unicode(section['match_strings']['start']),
+                            'end': normalize_unicode(section['match_strings']['end'])
+                        },
+                        'text': normalize_unicode(section.get('text', ''))
+                    }
+                    processed_sections.append(processed_section)
+                    
                 except Exception as e:
-                    logger.error(f"Error extracting text for section {section.get('type', 'unknown')}: {e}")
+                    logger.error(f"Error processing section {section.get('section_type', 'unknown')}: {e}")
+                    continue
             
-            # Assign the modified sections directly to document_history
-            document_history['sections'] = sections
+            # Create the document history object
+            document_history = {
+                'document_id': str(file_path),
+                'metadata': {
+                    'last_modified': document_history['metadata']['last_modified'],
+                    'contributors': document_history['metadata']['contributors']
+                },
+                'sections': processed_sections,  # Use the processed sections
+                'comments': document_history['comments'],
+                'revisions': document_history['revisions'],
+                'tables': extract_tables(tree, namespace, position_counter)
+            }
+
+            # Write to file if requested
+            if write_to_file:
+                output_file = output_dir / f"{paper_title}_processed.json"
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(document_history, f, indent=4)
+                print(f"File written to: {output_file.absolute()}")
             
+            return document_history
+
         except Exception as e:
             logger.error(f"Error in section processing: {str(e)}")
             logger.exception("Full traceback:")  # Add full traceback
@@ -470,6 +456,19 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(document_history, f, indent=4)
             print(f"File written to: {output_file.absolute()}")
+        
+        # After processing sections, normalize all text fields recursively
+        def normalize_text_fields(obj):
+            if isinstance(obj, dict):
+                return {k: normalize_text_fields(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [normalize_text_fields(item) for item in obj]
+            elif isinstance(obj, str):
+                return normalize_unicode(obj)
+            return obj
+
+        # Apply normalization before returning or writing to file
+        document_history = normalize_text_fields(document_history)
         
         return document_history
 
