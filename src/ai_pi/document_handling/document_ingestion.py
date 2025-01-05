@@ -11,23 +11,21 @@ from lxml import etree
 import zipfile
 from typing import Dict, List, Optional, TypedDict, Union
 from pathlib import Path
-import re
 import dspy
-import io
 from datetime import datetime
 import os
 import pypandoc
 import logging
-import unicodedata
 
 from src.ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
 from src.ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
 from .text_utils import (
     normalize_unicode,
-    clean_citations,
-    clean_xml_and_b64
+    # clean_citations,
+    # clean_xml_and_b64
 )
 
+logger = logging.getLogger(__name__)
 
 class Revision(TypedDict):
     id: str
@@ -369,7 +367,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         # After extracting full_text from PDF, identify sections
         section_identifier = SingleContextSectionIdentifier(engine=lm)
         try:
-            # Add debug logging
+            # Use logger that's now defined
             logger.info("About to call section_identifier.process_document")
             sections = section_identifier.process_document(full_text)
             logger.info(f"Type of sections returned: {type(sections)}")

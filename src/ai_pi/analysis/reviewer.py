@@ -112,7 +112,7 @@ class FinalReviewSignature(dspy.Signature):
     key_weaknesses = dspy.OutputField(desc="Major scientific weaknesses identified")
     recommendations = dspy.OutputField(desc="High-priority recommendations for improvement")
 
-class SectionReviewer(dspy.Module):
+class Reviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
     
     def __init__(self, 
@@ -274,11 +274,6 @@ class SectionReviewer(dspy.Module):
                 # Store section_type in the result for validation
                 result.inputs = {'section_type': section_type}
                 
-                # Validate the review
-                if not self._validate_scientific_depth(result):
-                    logger.warning(f"Review for {section_type} section failed scientific depth validation")
-                    return self._create_empty_review()
-                
                 try:
                     items = json.loads(result.review_items) if isinstance(result.review_items, str) else result.review_items
                 except json.JSONDecodeError:
@@ -303,60 +298,11 @@ class SectionReviewer(dspy.Module):
             logger.error(f"Error in forward method: {str(e)}")
             return self._create_empty_review()
 
+    #TODO: add validation to increase depth and usefulness of feedback
+    # and avoid superficial comments (this is like an internal reflection loop)
+    # to improve itself
     def _validate_scientific_depth(self, result) -> bool:
-        """Validate review's scientific depth and section appropriateness."""
-        # Basic scientific depth validation
-        scientific_indicators = ['methodology', 'theoretical', 'statistical', 'validation',
-                               'evidence', 'hypothesis', 'implications', 'limitations',
-                               'mechanism', 'causality', 'framework', 'analysis']
-        superficial_indicators = ['spelling', 'grammar', 'punctuation', 'word choice',
-                                'formatting', 'typo', 'rephrase']
-        
-        initial_analysis = result.initial_analysis.lower()
-        scientific_count = sum(1 for indicator in scientific_indicators if indicator in initial_analysis)
-        superficial_count = sum(1 for indicator in superficial_indicators if indicator in initial_analysis)
-        
-        reflection_scientific_focus = any(indicator in result.reflection.lower() 
-                                        for indicator in scientific_indicators)
-        
-        substantive_comments = sum(1 for item in result.review_items 
-                                 if any(indicator in (item.get('comment', '') if isinstance(item, dict) 
-                                                    else getattr(item, 'comment', '')).lower()
-                                       for indicator in scientific_indicators))
-        
-        total_comments = len(result.review_items)
-        
-        # Section-specific validation - Fix section_type access
-        section_type = getattr(result, 'section_type', '').lower() if hasattr(result, 'section_type') else result.inputs.get('section_type', '').lower()
-        review_text = (initial_analysis + ' ' + result.reflection).lower()
-        
-        # Check if review focuses on appropriate aspects for the section
-        section_focus = self.section_criteria.get(section_type, {}).get('focus', [])
-        section_avoid = self.section_criteria.get(section_type, {}).get('avoid', [])
-        
-        focus_alignment = any(focus in review_text for focus in section_focus)
-        avoid_violation = any(avoid in review_text for avoid in section_avoid)
-        
-        # Compile all validation criteria
-        criteria = [
-            scientific_count >= 2,
-            superficial_count <= 1,
-            reflection_scientific_focus,
-            substantive_comments / max(total_comments, 1) >= 0.7,
-            focus_alignment,
-            not avoid_violation  # Should NOT contain avoided topics
-        ]
-        
-        # Log validation results if verbose
-        if self.verbose:
-            logger.info(f"Section validation results for {section_type}:")
-            logger.info(f"Scientific depth: {scientific_count >= 2}")
-            logger.info(f"Focus alignment: {focus_alignment}")
-            logger.info(f"Avoid violation: {avoid_violation}")
-            logger.info(f"Total criteria met: {sum(criteria)} out of {len(criteria)}")
-        
-        # Return True if validation passes to prevent empty reviews during development
-        return True  # Temporarily return True while debugging section validation
+        return True
 
     def _create_empty_review(self) -> dspy.Prediction:
         return dspy.Prediction(review={'match_strings': [], 'comments': [], 'revisions': []})
@@ -398,7 +344,7 @@ if __name__ == "__main__":
         temperature=0.7,
     )
     
-    reviewer = SectionReviewer(
+    reviewer = Reviewer(
         engine=lm,
         reviewer_class="Predict",
         verbose=True,
@@ -412,4 +358,4 @@ if __name__ == "__main__":
     reviewed_document = reviewer.review_document(document)
     
     # Print results
-    print(json.dumps(reviewed_document['reviews'], indent=2))
+    print(json.dumps(reviewed_document, indent=4))

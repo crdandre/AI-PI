@@ -23,7 +23,7 @@ class DocumentAnalysis(dspy.Signature):
     relationships = dspy.InputField(desc="Relationship analysis between sections")
     analysis = dspy.OutputField(desc="Comprehensive review-oriented summary")
 
-class ContextAgent:
+class Summarizer:
     """
     Analyzes pre-sectioned academic papers using a hierarchical approach that mirrors
     how PIs review papers. Creates true summary trees where parent nodes
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         document_json = json.load(f)
     
     # Initialize context agent
-    context_agent = ContextAgent(lm=lm, verbose=True)
+    context_agent = Summarizer(lm=lm, verbose=True)
     
     # Process document
     analyzed_document = context_agent.analyze_sectioned_document(document_json)

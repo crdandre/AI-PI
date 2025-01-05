@@ -104,15 +104,23 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
     enable_track_changes(doc)
     
     print(f"Processing document with {len(doc.paragraphs)} paragraphs")
-    print("\nLooking for these matches:", document_review_items["match_strings"])
+    
+    # Flatten section reviews into lists
+    all_match_strings = []
+    all_comments = []
+    all_revisions = []
+    
+    for section_review in document_review_items.get('section_reviews', []):
+        review = section_review.get('review', {})
+        all_match_strings.extend(review.get('match_strings', []))
+        all_comments.extend(review.get('comments', []))
+        all_revisions.extend(review.get('revisions', []))
+    
+    print("\nLooking for these matches:", all_match_strings)
     
     matches_found = 0
     # Keep original matches in a list that won't be modified
-    all_matches = list(zip(
-        document_review_items["match_strings"],
-        document_review_items["comments"],
-        document_review_items["revisions"]
-    ))
+    all_matches = list(zip(all_match_strings, all_comments, all_revisions))
     
     # Track which matches have been successfully processed
     processed_matches = set()
