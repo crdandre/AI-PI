@@ -2,6 +2,11 @@
 1. Uses Marker to extract a formatted markdown from a pdf
 2. Uses LLM calls to multimodal models to correct figure caption
 fragments that get included in figure images
+
+Steps:
+1. Marker conversion
+2. with this markdown text, for each image, check the text below, and determine whether it's a complete, partial, or absent caption
+3. Do nothing, combine the caption text extracted from the image, or insert the whole caption extracted from the image depending on the case
 """
 
 from dotenv import load_dotenv
@@ -22,17 +27,53 @@ class ImageCaptionExtractor(dspy.Signature):
     answer: str = dspy.OutputField(desc="Extracted text from the image")
 
 
-class CaptionFragmentChecker(dspy.Signature):
-    text: str = dspy.InputField(desc="Text to analyze")
-    question: str = dspy.InputField(desc="Question about the text")
-    answer: str = dspy.OutputField(desc="Answer about whether text is a caption fragment")
+class CaptionAnalyzer(dspy.Signature):
+    """Analyze text to determine if it contains a figure caption"""
+    text: str = dspy.InputField(desc="""Text following an image to analyze. 
+        Identify if this is:
+        1. A complete figure caption (starts with 'Figure X:' or similar)
+        2. A partial caption, which includes:
+           - Detailed descriptions of figure parts
+           - Anatomical or technical explanations
+           - Lettered/numbered subfigure descriptions
+           - Text in italics that describes image content
+        3. Non-caption text (unrelated to the image)
+        
+        Consider:
+        - Formatting (italics, bold)
+        - Technical/anatomical terminology
+        - Presence of measurements or part numbers
+        - Position immediately after image
+        - Descriptive language patterns""")
+    answer: str = dspy.OutputField(desc="""JSON response with:
+        is_caption (bool): True if text is a complete standalone caption
+        is_fragment (bool): True if text is part of a caption or supplementary description
+        caption_type (str): "complete", "partial", or "none"
+        confidence (float): 0-1 confidence in classification
+        cleaned_text (str): Text with formatting preserved""")
+
+
+class MarkdownSegmenter(dspy.Signature):
+    """Determine if text belongs to an image caption"""
+    text_block: str = dspy.InputField(desc="Block of text to analyze")
+    answer: str = dspy.OutputField(desc="""JSON response with:
+        is_caption_content (bool): True if text appears to be part of a caption
+        ends_at_line (int): Line number where caption appears to end (0-based)
+        confidence (float): 0-1 confidence in assessment""")
 
 
 class PDFTextExtractor:
-    def __init__(self, lm, markdown_conversions_folder: str = None, format: str = "markdown"):
-        self.markdown_conversions_folder = markdown_conversions_folder
+    def __init__(
+        self,
+        lm,
+        output_folder: str = None,
+        format: str = "markdown"
+    ):
+        logging.info("Initializing PDFTextExtractor")
+        self.output_folder = output_folder
         self.format = format
         self.lm = lm
+        self.caption_status = {}  # Track caption status for each image
 
     def extract_pdf(self, input_pdf_path: str) -> str:
         """Extract text from a single PDF file and convert to markdown using LLM."""
@@ -40,7 +81,7 @@ class PDFTextExtractor:
             logging.error(f"Invalid input PDF path: {input_pdf_path}")
             return None
             
-        output_folder = os.path.join(os.path.dirname(input_pdf_path), self.markdown_conversions_folder)
+        output_folder = os.path.join(os.path.dirname(input_pdf_path), self.output_folder)
         os.makedirs(output_folder, exist_ok=True)
 
         filename = os.path.basename(input_pdf_path)
@@ -59,7 +100,7 @@ class PDFTextExtractor:
         try:
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             logging.info(f"Marker extraction completed for {input_pdf_path}")
-            logging.debug(f"Marker output: {result.stdout}")
+            logging.info(f"Marker output: {result.stdout}")
             
             # Read the generated markdown file
             with open(output_file, 'r', encoding='utf-8') as f:
@@ -80,96 +121,117 @@ class PDFTextExtractor:
     
     
     def _correct_image_figure_segmentation(self, text: str, lm) -> str:
-        """Correct image and figure segmentation by identifying caption text embedded in images."""
-        process_log = []
+        """
+        Process markdown text to handle image captions:
+        1. Find each image
+        2. Check text below for caption status
+        3. Extract caption from image if needed
+        4. Combine or replace caption as appropriate
+        """
+        def get_text_until_next_image(lines, start_idx):
+            """Get all text until the next image or end of file."""
+            text_block = []
+            i = start_idx
+            while i < len(lines) and not re.search(r'!\[\]\(_page_\d+_Figure_\d+\.jpeg\)', lines[i]):
+                text_block.append(lines[i])
+                i += 1
+            return '\n'.join(text_block).strip(), i
+
+        lines = text.split('\n')
+        result = []
+        i = 0
         
-        # Add counter for LLM calls
-        llm_call_count = 0
-        image_count = 0
-        
-        # Updated pattern to capture the image markdown and any following text until next image/section
-        image_pattern = r'(!\[.*?\]\([^)]+\))\s*(?:([^!*]*)|\*(.*?)\*)'
-        
-        def process_image_and_caption(match):
-            nonlocal image_count, llm_call_count
-            image_count += 1
+        while i < len(lines):
+            line = lines[i]
             
-            image_markdown = match.group(1)
-            # Combine and clean up existing text, removing any stray asterisks
-            existing_text = (match.group(2) or match.group(3) or "").strip('* \n')
+            # If not an image line, keep it and continue
+            if not re.search(r'!\[\]\(_page_\d+_Figure_\d+\.jpeg\)', line):
+                result.append(line)
+                i += 1
+                continue
             
-            print(f"\n=== Processing Image {image_count} ===")
-            print(f"Image Markdown: {image_markdown}")
-            print(f"Existing text: {existing_text.strip()}")
+            # Found an image - add it to result
+            result.append(line)
             
-            image_path_match = re.search(r'\((.*?)\)', image_markdown)
-            if not image_path_match:
-                print("ERROR: Could not extract image path")
-                return match.group(0)
+            # Get the image path
+            image_path = re.search(r'!\[\]\((.*?)\)', line).group(1)
+            full_image_path = os.path.join(self.output_folder, image_path) if self.output_folder else image_path
             
-            image_path = image_path_match.group(1)
-            base_path = "/home/christian/projects/agents/ai_pi/examples/testwcomments/"
-            full_image_path = os.path.join(base_path, image_path)
-            print(f"Full image path: {full_image_path}")
-            
-            predictor_image = dspy.Predict(ImageCaptionExtractor)
-            predictor_text = dspy.Predict(CaptionFragmentChecker)
+            # Get text block until next image
+            following_text, next_i = get_text_until_next_image(lines, i + 1)
             
             try:
-                image = dspy.Image.from_file(full_image_path)
-                print("\n=== Making LLM call for image analysis ===")
-                llm_call_count += 1
-                result = predictor_image(
-                    image=image,
-                    question="What is the figure number and title shown in this image? If none found, respond with 'No figure title found.'"
-                )
-                print(f"LLM Response for image analysis: {result.answer}")
+                # Analyze existing text
+                analyzer = dspy.Predict(CaptionAnalyzer)
+                analysis = json.loads(analyzer(text=following_text).answer)
                 
-                embedded_text = result.answer
-                print(f"LLM found text: {embedded_text}")
-                
-                if embedded_text and "No figure title found" not in embedded_text:
-                    # Clean up embedded text
-                    embedded_text = embedded_text.strip('* \n')
+                # Extract caption from image if needed
+                if not analysis['is_caption'] or analysis['is_fragment']:
+                    extractor = dspy.Predict(ImageCaptionExtractor)
+                    image_caption = extractor(
+                        image=dspy.Image.from_file(full_image_path),
+                        question="Extract any figure caption text from this image."
+                    ).answer.strip()
                     
-                    # If there's existing text, separate it from the caption
-                    if existing_text:
-                        # Add double newline between caption and following text
-                        final_text = f"{image_markdown}\n\n*{embedded_text}*\n\n{existing_text}"
-                    else:
-                        final_text = f"{image_markdown}\n\n*{embedded_text}*"
+                    if analysis['is_fragment']:
+                        # Combine partial caption with extracted
+                        result.append(self.combine_captions(following_text, image_caption))
+                    elif image_caption:
+                        # No existing caption - insert extracted
+                        result.append(image_caption)
                 else:
-                    # If no embedded text found but we have existing text
-                    final_text = f"{image_markdown}\n\n*{existing_text}*" if existing_text else image_markdown
-                
-                # Ensure we don't have double asterisks
-                final_text = final_text.replace('**', '*')
-                
-                print(f"Final text:\n{final_text}\n")
-                return final_text
-                
+                    # Complete caption exists - keep original text
+                    result.extend(lines[i+1:next_i])
             except Exception as e:
-                print(f"ERROR processing image: {str(e)}")
-                return match.group(0)
+                logging.error(f"Error processing caption for {image_path}: {str(e)}")
+                # On error, preserve original text
+                result.extend(lines[i+1:next_i])
+            
+            i = next_i
+            
+        return '\n'.join(result)
+
+    def combine_captions(self, original_text: str, new_text: str) -> str:
+        """Combine original and new caption text, preserving italics if present."""
+        # Check if the original text is italicized
+        is_italicized = original_text.startswith('*') and original_text.endswith('*')
         
-        # Process all images in the text
-        corrected_text = re.sub(image_pattern, process_image_and_caption, text)
+        # Remove existing italics markers for clean combination
+        if is_italicized:
+            original_text = original_text.strip('*')
         
-        # Add pattern to fix adjacent captions without proper spacing
-        # This will match any caption ending immediately followed by another caption starting
-        corrected_text = re.sub(r'(\*[^\n]+?\*)\*([^\n]+?\*)', r'\1\n\n*\2', corrected_text)
+        # Combine the texts
+        combined_text = f"{original_text} {new_text}".strip()
         
-        print(f"\nTotal images processed: {image_count}")
-        print(f"Total LLM calls made: {llm_call_count}")
+        # Wrap in italics if the original was italicized
+        if is_italicized:
+            combined_text = f"*{combined_text}*"
         
-        return corrected_text
+        return combined_text
+
+
+class CaptionCombiner(dspy.Signature):
+    """Combine image caption and text fragment into a complete caption while preserving formatting"""
+    image_caption: str = dspy.InputField(desc="Caption extracted from image")
+    text_fragment: str = dspy.InputField(desc="Caption fragment from text")
+    answer: str = dspy.OutputField(desc="""Combined complete caption that:
+        1. Preserves any existing formatting (bold, italics, etc.)
+        2. Maintains figure numbering if present
+        3. Combines information from both sources without redundancy
+        4. Uses the formatting style from text_fragment if present""")
+
 
 if __name__ == "__main__":
     import os
     from dotenv import load_dotenv
     load_dotenv()
     
-    logging.basicConfig(level=logging.INFO)
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     
     # Configure OpenRouter LLM
     openrouter_model = 'openrouter/openai/gpt-4o-mini'
@@ -180,36 +242,41 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     dspy.settings.configure(lm=lm)
-    filename = "testwocomments.pdf"
-    pdf_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}"
-    markdown_conversions_folder = f"/home/christian/projects/agents/ai_pi/examples/testwocomments"
+    # filename = "mmapis.pdf"
+    # pdf_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}"
+    # output_folder = f"/home/christian/projects/agents/ai_pi/examples/mmapis"
+    
+    # extractor = PDFTextExtractor(
+    #     lm=lm,
+    #     output_folder=output_folder,
+    #     format="markdown"
+    # )
+    # output_path = extractor.extract_pdf(pdf_path)
+    
+    # print(output_path)
+
+    #Test _correct_image_figure_segmentation
+    
+    filename = "testwocomments"
+    test_markdown_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}/{filename}.md"
+    output_path = test_markdown_path.replace('.md', '_corrected.md')
     
     extractor = PDFTextExtractor(
         lm=lm,
-        markdown_conversions_folder=markdown_conversions_folder,
-        format="markdown"
+        output_folder=f"/home/christian/projects/agents/ai_pi/examples/{filename}/"
     )
-    output_path = extractor.extract_pdf(pdf_path)
     
-    print(output_path)
-
-    # # Test _correct_image_figure_segmentation
-    # test_markdown_path = "/home/christian/projects/agents/ai_pi/examples/testwcomments/testwcomments.md"
-    # output_path = test_markdown_path.replace('.md', '_corrected.md')
+    # Read the test markdown file
+    with open(test_markdown_path, 'r', encoding='utf-8') as f:
+        test_markdown = f.read()
     
-    # extractor = PDFTextExtractor(lm=lm)
+    # Process the markdown and correct image segmentation
+    corrected_markdown = extractor._correct_image_figure_segmentation(test_markdown, lm)
     
-    # # Read the test markdown file
-    # with open(test_markdown_path, 'r', encoding='utf-8') as f:
-    #     test_markdown = f.read()
+    # Write corrected markdown to new file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(corrected_markdown)
     
-    # # Process the markdown and correct image segmentation
-    # corrected_markdown = extractor._correct_image_figure_segmentation(test_markdown, lm)
-    
-    # # Write corrected markdown to new file
-    # with open(output_path, 'w', encoding='utf-8') as f:
-    #     f.write(corrected_markdown)
-    
-    # print(f"Corrected markdown written to: {output_path}")
+    print(f"Corrected markdown written to: {output_path}")
     
     
