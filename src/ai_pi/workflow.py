@@ -6,11 +6,11 @@ import dspy
 
 from llama_index.llms.nvidia import NVIDIA
 
-from ai_pi.llm.context import ContextAgent
-from ai_pi.llm.summarizer import PaperSummarizer
-from ai_pi.llm.reviewer import SectionReviewer
-from ai_pi.documents.document_output import output_commented_document
-from ai_pi.documents.document_ingestion import extract_document_history
+from ai_pi.analysis.context import ContextAgent
+from ai_pi.analysis.summarizer import PaperSummarizer
+from ai_pi.analysis.reviewer import SectionReviewer
+from ai_pi.document_handling.document_output import output_commented_document
+from ai_pi.document_handling.document_ingestion import extract_document_history
 
 
 class PaperReview:

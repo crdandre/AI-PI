@@ -20,8 +20,8 @@ import pypandoc
 import logging
 import unicodedata
 
-from src.ai_pi.documents.marker_extract_from_pdf import PDFTextExtractor
-from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
+from src.ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
+from src.ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
 from .text_utils import (
     normalize_unicode,
     clean_citations,
