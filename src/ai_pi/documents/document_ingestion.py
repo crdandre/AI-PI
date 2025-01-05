@@ -487,7 +487,8 @@ if __name__ == "__main__":
     # Create logger for this module
     logger = logging.getLogger(__name__)
     
-    openrouter_model = 'openrouter/openai/gpt-4o'
+    # openrouter_model = 'openrouter/openai/gpt-4o'
+    openrouter_model = 'openrouter/anthropic/claude-3.5-sonnet:beta'
     
     # Initialize and run
     logger.info("Initializing LM with OpenRouter")
