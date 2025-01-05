@@ -72,7 +72,12 @@ class SingleContextSectionIdentifier:
         self.section_predictor = dspy.ChainOfThought(DocumentSections)
     
     def _clean_markdown(self, text: str) -> str:
-        """Remove bold/italic formatting but preserve headers."""
+        """Remove bold/italic formatting but preserve headers and handle Unicode characters."""
+        # First handle common Unicode characters
+        text = text.replace('\u00b0', '°')  # Degree symbol
+        text = text.replace('\u00b1', '±')  # Plus-minus symbol
+        
+        # Then handle markdown formatting
         text = re.sub(r'(?<![#])\*\*(.+?)\*\*', r'\1', text)  # Remove bold not preceded by #
         text = re.sub(r'(?<![#])\*(.+?)\*', r'\1', text)      # Remove italic not preceded by #
         return text
@@ -257,7 +262,6 @@ if __name__ == "__main__":
     
     print(sections)
     
-    # Print results
-    import json
-    print(json.dumps(sections, indent=4))
+    # Print results with proper encoding
+    print(json.dumps(sections, indent=4, ensure_ascii=False))
 
