@@ -51,6 +51,17 @@ class CaptionAnalyzer(dspy.Signature):
         caption_type (str): "complete", "partial", or "none"
         confidence (float): 0-1 confidence in classification
         cleaned_text (str): Text with formatting preserved""")
+    
+    
+class CaptionCombiner(dspy.Signature):
+    """Combine image caption and text fragment into a complete caption while preserving formatting"""
+    image_caption: str = dspy.InputField(desc="Caption extracted from image")
+    text_fragment: str = dspy.InputField(desc="Caption fragment from text")
+    answer: str = dspy.OutputField(desc="""Combined complete caption that:
+        1. Preserves any existing formatting (bold, italics, etc.)
+        2. Maintains figure numbering if present
+        3. Combines information from both sources without redundancy
+        4. Uses the formatting style from text_fragment if present""")
 
 
 class MarkdownSegmenter(dspy.Signature):
@@ -60,6 +71,7 @@ class MarkdownSegmenter(dspy.Signature):
         is_caption_content (bool): True if text appears to be part of a caption
         ends_at_line (int): Line number where caption appears to end (0-based)
         confidence (float): 0-1 confidence in assessment""")
+
 
 
 class PDFTextExtractor:
@@ -122,21 +134,8 @@ class PDFTextExtractor:
     
     def _correct_image_figure_segmentation(self, text: str, lm) -> str:
         """
-        Process markdown text to handle image captions:
-        1. Find each image
-        2. Check text below for caption status
-        3. Extract caption from image if needed
-        4. Combine or replace caption as appropriate
+        Process markdown text to handle image captions while preserving all other content.
         """
-        def get_text_until_next_image(lines, start_idx):
-            """Get all text until the next image or end of file."""
-            text_block = []
-            i = start_idx
-            while i < len(lines) and not re.search(r'!\[\]\(_page_\d+_Figure_\d+\.jpeg\)', lines[i]):
-                text_block.append(lines[i])
-                i += 1
-            return '\n'.join(text_block).strip(), i
-
         lines = text.split('\n')
         result = []
         i = 0
@@ -144,51 +143,47 @@ class PDFTextExtractor:
         while i < len(lines):
             line = lines[i]
             
-            # If not an image line, keep it and continue
+            # If not an image, keep line and continue
             if not re.search(r'!\[\]\(_page_\d+_Figure_\d+\.jpeg\)', line):
                 result.append(line)
                 i += 1
                 continue
             
-            # Found an image - add it to result
-            result.append(line)
-            
-            # Get the image path
+            # Found an image - process it and its caption
+            result.append(line)  # Keep the image reference
             image_path = re.search(r'!\[\]\((.*?)\)', line).group(1)
             full_image_path = os.path.join(self.output_folder, image_path) if self.output_folder else image_path
             
-            # Get text block until next image
-            following_text, next_i = get_text_until_next_image(lines, i + 1)
+            # Get next line (potential caption)
+            next_line = lines[i + 1] if i + 1 < len(lines) else ""
             
-            try:
-                # Analyze existing text
-                analyzer = dspy.Predict(CaptionAnalyzer)
-                analysis = json.loads(analyzer(text=following_text).answer)
+            # Analyze the next line for caption content
+            analyzer = dspy.Predict(CaptionAnalyzer)
+            analysis = json.loads(analyzer(text=next_line).answer)
+            
+            if analysis['is_caption'] and not analysis['is_fragment']:
+                # Complete caption exists - keep it as is
+                result.append(next_line)
+                i += 2  # Skip past image and caption
+            else:
+                # Extract caption from image
+                extractor = dspy.Predict(ImageCaptionExtractor)
+                image_caption = extractor(
+                    image=dspy.Image.from_file(full_image_path),
+                    question="Extract any figure caption text from this image."
+                ).answer.strip()
                 
-                # Extract caption from image if needed
-                if not analysis['is_caption'] or analysis['is_fragment']:
-                    extractor = dspy.Predict(ImageCaptionExtractor)
-                    image_caption = extractor(
-                        image=dspy.Image.from_file(full_image_path),
-                        question="Extract any figure caption text from this image."
-                    ).answer.strip()
-                    
-                    if analysis['is_fragment']:
-                        # Combine partial caption with extracted
-                        result.append(self.combine_captions(following_text, image_caption))
-                    elif image_caption:
-                        # No existing caption - insert extracted
-                        result.append(image_caption)
+                if analysis['is_fragment']:
+                    # Combine partial caption with extracted
+                    combined = self.combine_captions(next_line, image_caption)
+                    result.append(combined)
+                    i += 2  # Skip past image and partial caption
                 else:
-                    # Complete caption exists - keep original text
-                    result.extend(lines[i+1:next_i])
-            except Exception as e:
-                logging.error(f"Error processing caption for {image_path}: {str(e)}")
-                # On error, preserve original text
-                result.extend(lines[i+1:next_i])
-            
-            i = next_i
-            
+                    # No caption - insert extracted
+                    if image_caption:
+                        result.append(image_caption)
+                    i += 1  # Skip past just the image
+                
         return '\n'.join(result)
 
     def combine_captions(self, original_text: str, new_text: str) -> str:
@@ -208,17 +203,6 @@ class PDFTextExtractor:
             combined_text = f"*{combined_text}*"
         
         return combined_text
-
-
-class CaptionCombiner(dspy.Signature):
-    """Combine image caption and text fragment into a complete caption while preserving formatting"""
-    image_caption: str = dspy.InputField(desc="Caption extracted from image")
-    text_fragment: str = dspy.InputField(desc="Caption fragment from text")
-    answer: str = dspy.OutputField(desc="""Combined complete caption that:
-        1. Preserves any existing formatting (bold, italics, etc.)
-        2. Maintains figure numbering if present
-        3. Combines information from both sources without redundancy
-        4. Uses the formatting style from text_fragment if present""")
 
 
 if __name__ == "__main__":
