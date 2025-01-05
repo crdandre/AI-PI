@@ -6,7 +6,7 @@ import dspy
 
 from llama_index.llms.nvidia import NVIDIA
 
-from ai_pi.analysis.context import ContextAgent
+from ai_pi.analysis.summarizer import ContextAgent
 from ai_pi.analysis.summarizer import PaperSummarizer
 from ai_pi.analysis.reviewer import SectionReviewer
 from ai_pi.document_handling.document_output import output_commented_document

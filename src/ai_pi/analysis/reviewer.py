@@ -192,11 +192,52 @@ class SectionReviewer(dspy.Module):
             }
         }
 
-    def review_section(self, section_text: str, section_type: str, paper_context: dict | str) -> dict:
-        """Main entry point for reviewing sections."""
+    def review_document(self, document_json: dict) -> dict:
+        """Main entry point for reviewing an entire document."""
         try:
             if self.verbose:
-                print(f"Reviewing {section_type} section...")
+                print("Starting document review...")
+            
+            # Extract context from hierarchical summary if available
+            paper_context = {
+                'paper_summary': document_json.get('hierarchical_summary', {})
+                    .get('document_summary', {})
+                    .get('document_analysis', '')
+            }
+            
+            # Review each section
+            section_reviews = []
+            for section in document_json.get('sections', []):
+                review = self.review_section(section, paper_context=paper_context)
+                section_reviews.append({
+                    'section_type': section['section_type'],
+                    'review': review
+                })
+            
+            # Compile final review
+            final_review = self.compile_final_review(section_reviews, paper_context)
+            
+            # Add reviews to document
+            document_json['reviews'] = {
+                'section_reviews': section_reviews,
+                'final_review': final_review
+            }
+            
+            return document_json
+                
+        except Exception as e:
+            logger.error(f"Error reviewing document: {str(e)}")
+            return document_json
+
+    def review_section(self, section: dict, paper_context: dict | str = None) -> dict:
+        """Review a single section from the document."""
+        try:
+            if self.verbose:
+                print(f"Reviewing {section['section_type']} section...")
+            
+            # Extract section info
+            section_text = section['text']
+            section_type = section['section_type']
             
             # Convert string context to dict if needed
             if isinstance(paper_context, str):
@@ -205,7 +246,12 @@ class SectionReviewer(dspy.Module):
                 paper_context = {'paper_summary': ''}
 
             result = self.forward(section_text, section_type, paper_context)
-            return result.review if hasattr(result, 'review') else self._create_empty_review()['review']
+            
+            # Add match_strings from original section for reference
+            review = result.review if hasattr(result, 'review') else self._create_empty_review()['review']
+            review['original_match_strings'] = section.get('match_strings', {})
+            
+            return review
                 
         except Exception as e:
             logger.error(f"Error reviewing section: {str(e)}")
@@ -329,10 +375,6 @@ class SectionReviewer(dspy.Module):
                     'key_strengths': [str(s) for s in (final_review.key_strengths if isinstance(final_review.key_strengths, list) else [final_review.key_strengths])],
                     'key_weaknesses': [str(w) for w in (final_review.key_weaknesses if isinstance(final_review.key_weaknesses, list) else [final_review.key_weaknesses])],
                     'recommendations': [str(r) for r in (final_review.recommendations if isinstance(final_review.recommendations, list) else [final_review.recommendations])],
-                    'model_info': {  # Add model information
-                        'engine': str(self.engine),
-                        'using_cot': isinstance(self.reviewer, dspy.ChainOfThought)
-                    }
                 }
         except Exception as e:
             logger.error(f"Error compiling final review: {str(e)}")
@@ -341,84 +383,33 @@ class SectionReviewer(dspy.Module):
                 'key_strengths': [],
                 'key_weaknesses': [],
                 'recommendations': [],
-                'model_info': {
-                    'engine': str(self.engine),
-                    'using_cot': isinstance(self.reviewer, dspy.ChainOfThought)
-                }
             }
 
 
 if __name__ == "__main__":
     import os
+    import json
+    
     # Test the reviewer with DSPy's LM directly
     lm = dspy.LM(
-        'openrouter/openai/gpt-4o-mini',
+        'openrouter/openai/gpt-4o',
         api_base="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
         temperature=0.7,
     )
-    lm = dspy.LM(
-        'openrouter/openai/o1-mini',
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=1.0,
-        max_tokens=9999
-    )
-    # lm = dspy.LM(
-    #     'openrouter/qwen/qwq-32b-preview',
-    #     api_base="https://openrouter.ai/api/v1",
-    #     api_key=os.getenv("OPENROUTER_API_KEY"),
-    #     temperature=0.7,
-    # )
+    
     reviewer = SectionReviewer(
         engine=lm,
         reviewer_class="Predict",
         verbose=True,
     )
     
-    test_context = {
-        'paper_summary': '''This paper presents a novel machine learning approach for predicting scoliosis curve 
-        progression in adolescent patients. The model integrates radiographic measurements, patient metadata, 
-        and temporal progression patterns to forecast curve changes over 2-year periods.'''
-    }
+    # Load and process sample document
+    with open("ref/sample_output.json", "r") as f:
+        document = json.load(f)
     
-    test_sections = [
-        {
-            'text': '''Our deep learning model architecture consists of three main components: 1) a CNN backbone 
-            for radiographic feature extraction, 2) an LSTM module for temporal progression modeling, and 3) a 
-            fusion layer that combines image features with clinical metadata. The model was implemented in 
-            PyTorch and trained on 5,000 longitudinal cases.''',
-            'type': 'Methods'
-        },
-        {
-            'text': '''The model achieved a mean absolute error of 3.2° in predicting Cobb angle progression 
-            at 24 months. This represents a 35 percent improvement over current clinical prediction rules. ROC analysis 
-            showed an AUC of 0.82 for identifying high-risk patients requiring surgical intervention.''',
-            'type': 'Results'
-        },
-        {
-            'text': '''While our results demonstrate strong predictive performance, several limitations should 
-            be noted. First, our training data comes from a single institution and may not generalize to all 
-            patient populations. Second, the model's performance degrades for curves above 60°, likely due to 
-            limited training examples in this range.''',
-            'type': 'Discussion'
-        }
-    ]
+    # Review entire document
+    reviewed_document = reviewer.review_document(document)
     
-    # For testing, use the first section
-    test_section = test_sections[0]
-    
-    with dspy.settings.context(lm=lm):
-        # Run the review
-        review = reviewer.review_section(
-            test_section['text'],
-            test_section['type'],
-            test_context
-        )
-        
-        # Print the CoT history
-        print("\nChain of Thought History:")
-        print(dspy.inspect_history(n=10))
-        
-        print("\nFinal Review:")
-        print(json.dumps(review, indent=2))
+    # Print results
+    print(json.dumps(reviewed_document['reviews'], indent=2))
