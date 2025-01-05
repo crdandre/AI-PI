@@ -49,25 +49,35 @@ class SingleContextSectionIdentifier:
                     {text}"""
                 
                 result = self.predictor(text=prompt)
-                                
-                # Clean up the JSON string if it's wrapped in markdown code block
+                
+                # Handle both string and list responses
                 if isinstance(result.sections, str):
                     # Remove markdown code block syntax if present
                     cleaned_json = result.sections.replace('```json\n', '').replace('\n```', '').strip()
                     sections = json.loads(cleaned_json)
-                    return [
-                        {
+                else:
+                    sections = result.sections
+
+                # Ensure we're working with a list
+                if not isinstance(sections, list):
+                    logger.error(f"Unexpected sections format: {type(sections)}")
+                    return []
+
+                # Process each section
+                processed_sections = []
+                for section in sections:
+                    if isinstance(section, dict) and 'section_type' in section and 'match_strings' in section:
+                        processed_sections.append({
                             'type': section['section_type'],
                             'match_strings': {
                                 'start': section['match_strings']['start'],
                                 'end': section['match_strings']['end']
                             }
-                        }
-                        for section in sections
-                    ]
+                        })
+                    else:
+                        logger.warning(f"Skipping malformed section: {section}")
 
-                logger.error(f"Unexpected sections type: {type(result.sections)}")
-                return []
+                return processed_sections
                 
         except Exception as e:
             logger.error(f"Error identifying sections: {str(e)}")
@@ -88,7 +98,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     # Use specific file path
-    paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/test_full_text.txt")  
+    paper_path = Path("/home/christian/projects/agents/ai_pi/examples/testwocomments/testwocomments_corrected.md")  
     with open(paper_path, 'r', encoding='utf-8') as f:
         paper_text = f.read()
         
@@ -107,6 +117,8 @@ if __name__ == "__main__":
     )
     identifier = SingleContextSectionIdentifier(engine=lm)
     sections = identifier.process_document(text=paper_text)
+    
+    print(sections)
     
     # Print results
     import json

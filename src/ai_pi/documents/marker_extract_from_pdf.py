@@ -18,6 +18,7 @@ import subprocess
 import re
 import dspy
 import json
+import time
 
 
 # Create signatures for image analysis
@@ -45,7 +46,7 @@ class CaptionAnalyzer(dspy.Signature):
         - Presence of measurements or part numbers
         - Position immediately after image
         - Descriptive language patterns""")
-    answer: str = dspy.OutputField(desc="""JSON response with:
+    answer: str = dspy.OutputField(desc="""String containing JSON response with:
         is_caption (bool): True if text is a complete standalone caption
         is_fragment (bool): True if text is part of a caption or supplementary description
         caption_type (str): "complete", "partial", or "none"
@@ -92,47 +93,70 @@ class PDFTextExtractor:
         if not input_pdf_path or not os.path.exists(input_pdf_path):
             logging.error(f"Invalid input PDF path: {input_pdf_path}")
             return None
-            
-        output_folder = os.path.join(os.path.dirname(input_pdf_path), self.output_folder)
-        os.makedirs(output_folder, exist_ok=True)
-
+        
         filename = os.path.basename(input_pdf_path)
-        output_file = os.path.join(output_folder, f"{os.path.splitext(filename)[0]}.md")
+        base_name = os.path.splitext(filename)[0]
+        # Use self.output_folder if provided, otherwise use input file's directory
+        output_dir = self.output_folder if self.output_folder else os.path.dirname(input_pdf_path)
+        # Add the subdirectory that Marker creates
+        output_subdir = os.path.join(output_dir, base_name)
+        output_file = os.path.join(output_subdir, f"{base_name}.md")
+
+        # Debug logging
+        logging.info(f"Input PDF path: {input_pdf_path}")
+        logging.info(f"Output directory: {output_dir}")
+        logging.info(f"Output subdirectory: {output_subdir}")
+        logging.info(f"Expected output file: {output_file}")
+
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
 
         command = [
             "marker_single",
             input_pdf_path,
             "--output_dir",
-            output_folder,
+            output_dir,
             "--use_llm",
             "--output_format",
             self.format
         ]
 
         try:
+            logging.info(f"Running command: {' '.join(command)}")
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             logging.info(f"Marker extraction completed for {input_pdf_path}")
             logging.info(f"Marker output: {result.stdout}")
             
-            # Read the generated markdown file
-            with open(output_file, 'r', encoding='utf-8') as f:
-                markdown_text = f.read()
+            # Wait briefly to ensure file is written
+            time.sleep(1)
             
-            # Correct image segmentation
-            corrected_text = self._correct_image_figure_segmentation(markdown_text, lm)
+            # Check if file exists in the expected location
+            if os.path.exists(output_file):
+                return output_file
             
-            # Write corrected text back to file
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(corrected_text)
+            # If not found in expected location, search in output directory
+            logging.warning(f"Expected output file not found at {output_file}")
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    if file.endswith('.md'):
+                        found_file = os.path.join(root, file)
+                        logging.info(f"Found markdown file at: {found_file}")
+                        return found_file
+                    
+            logging.error("No markdown file found in output directory")
+            return None
             
-            return output_file
         except subprocess.CalledProcessError as e:
             logging.error(f"Error running marker_single: {e}")
             logging.error(f"Marker stderr: {e.stderr}")
             return None
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            logging.error(f"Current working directory: {os.getcwd()}")
+            return None
     
     
-    def _correct_image_figure_segmentation(self, text: str, lm) -> str:
+    def _correct_image_figure_segmentation(self, text: str) -> str:
         """
         Process markdown text to handle image captions while preserving all other content.
         """
@@ -158,8 +182,11 @@ class PDFTextExtractor:
             next_line = lines[i + 1] if i + 1 < len(lines) else ""
             
             # Analyze the next line for caption content
-            analyzer = dspy.Predict(CaptionAnalyzer)
-            analysis = json.loads(analyzer(text=next_line).answer)
+            analyzer = dspy.Predict(CaptionAnalyzer, lm=self.lm)
+            analysis_string = analyzer(text=next_line).answer
+            logging.info("analysis_string obtained")
+            analysis = json.loads(analysis_string)
+            logging.info("analysis json parsed")
             
             if analysis['is_caption'] and not analysis['is_fragment']:
                 # Complete caption exists - keep it as is
@@ -167,7 +194,7 @@ class PDFTextExtractor:
                 i += 2  # Skip past image and caption
             else:
                 # Extract caption from image
-                extractor = dspy.Predict(ImageCaptionExtractor)
+                extractor = dspy.Predict(ImageCaptionExtractor, lm=self.lm)
                 image_caption = extractor(
                     image=dspy.Image.from_file(full_image_path),
                     question="Extract any figure caption text from this image."
@@ -226,41 +253,42 @@ if __name__ == "__main__":
         temperature=0.01,
     )
     dspy.settings.configure(lm=lm)
-    # filename = "mmapis.pdf"
-    # pdf_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}"
-    # output_folder = f"/home/christian/projects/agents/ai_pi/examples/mmapis"
     
-    # extractor = PDFTextExtractor(
-    #     lm=lm,
-    #     output_folder=output_folder,
-    #     format="markdown"
-    # )
-    # output_path = extractor.extract_pdf(pdf_path)
-    
-    # print(output_path)
-
-    #Test _correct_image_figure_segmentation
-    
-    filename = "testwocomments"
-    test_markdown_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}/{filename}.md"
-    output_path = test_markdown_path.replace('.md', '_corrected.md')
+    filename = "mmapis.pdf"
+    pdf_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}"
+    output_folder = f"/home/christian/projects/agents/ai_pi/examples/mmapis"
     
     extractor = PDFTextExtractor(
         lm=lm,
-        output_folder=f"/home/christian/projects/agents/ai_pi/examples/{filename}/"
+        output_folder=output_folder,
+        format="markdown"
     )
+    output_path = extractor.extract_pdf(pdf_path)
     
-    # Read the test markdown file
-    with open(test_markdown_path, 'r', encoding='utf-8') as f:
-        test_markdown = f.read()
+    print(output_path)
+
+    #Test _correct_image_figure_segmentation
     
-    # Process the markdown and correct image segmentation
-    corrected_markdown = extractor._correct_image_figure_segmentation(test_markdown, lm)
+    # filename = "testwocomments"
+    # test_markdown_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}/{filename}.md"
+    # output_path = test_markdown_path.replace('.md', '_corrected.md')
     
-    # Write corrected markdown to new file
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(corrected_markdown)
+    # extractor = PDFTextExtractor(
+    #     lm=lm,
+    #     output_folder=f"/home/christian/projects/agents/ai_pi/examples/{filename}/"
+    # )
     
-    print(f"Corrected markdown written to: {output_path}")
+    # # Read the test markdown file
+    # with open(test_markdown_path, 'r', encoding='utf-8') as f:
+    #     test_markdown = f.read()
+    
+    # # Process the markdown and correct image segmentation
+    # corrected_markdown = extractor._correct_image_figure_segmentation(test_markdown)
+    
+    # # Write corrected markdown to new file
+    # with open(output_path, 'w', encoding='utf-8') as f:
+    #     f.write(corrected_markdown)
+    
+    # print(f"Corrected markdown written to: {output_path}")
     
     

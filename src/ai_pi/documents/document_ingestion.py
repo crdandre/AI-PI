@@ -12,12 +12,15 @@ import zipfile
 from typing import Dict, List, Optional, TypedDict, Union
 from pathlib import Path
 import re
-from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
 import dspy
 import io
-from PIL import Image
 from datetime import datetime
 import os
+import pypandoc
+import logging
+
+from src.ai_pi.documents.marker_extract_from_pdf import PDFTextExtractor
+from src.ai_pi.documents.section_identifier import SingleContextSectionIdentifier
 
 
 class Revision(TypedDict):
@@ -47,14 +50,6 @@ class Comment(TypedDict):
 class TableData(TypedDict):
     id: str
     content: List[List[str]]
-    position: Dict[str, int]
-    caption: Optional[str]
-
-
-class ImageData(TypedDict):
-    id: str
-    path: str  # Changed from 'data' to 'path'
-    format: str
     position: Dict[str, int]
     caption: Optional[str]
 
@@ -207,102 +202,6 @@ def extract_tables(tree: etree.Element, namespace: Dict[str, str], position_coun
     return []
 
 
-def extract_images(docx: zipfile.ZipFile, tree: etree.Element, namespace: Dict[str, str], 
-                  position_counter: int, output_dir: Path) -> List[ImageData]:
-    """
-    Extract images from the document and save to filesystem.
-    Images are saved to: output_dir/images/image_{n}.jpeg
-    """
-    images = []
-    
-    # Create images directory
-    images_dir = output_dir / 'images'
-    images_dir.mkdir(parents=True, exist_ok=True)
-    
-    try:
-        # Read relationships file
-        rels = docx.read('word/_rels/document.xml.rels')
-        rels_tree = etree.fromstring(rels)
-        
-        # Create relationship ID to image path mapping
-        image_rels = {
-            rel.get('Id'): rel.get('Target')
-            for rel in rels_tree.iter()
-            if 'image' in rel.get('Type', '')
-        }
-        
-        # Process images in document
-        for element in tree.iter(f'{{{namespace["w"]}}}drawing'):
-            blip = element.find(
-                './/a:blip',
-                {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
-            )
-            
-            if blip is not None:
-                rid = blip.get(f'{{{namespace["r"]}}}embed')
-                if rid in image_rels:
-                    image_path = image_rels[rid]
-                    try:
-                        # Extract image data
-                        image_data = docx.read(f'word/{image_path}')
-                        
-                        # Convert to JPEG with white background
-                        try:
-                            # Open image using PIL
-                            img = Image.open(io.BytesIO(image_data))
-                            
-                            # Create a white background image
-                            white_bg = Image.new('RGB', img.size, (255, 255, 255))
-                            
-                            # If image has transparency (RGBA or P mode)
-                            if img.mode in ('RGBA', 'P'):
-                                # Paste the image onto white background using alpha channel as mask
-                                if img.mode == 'P':
-                                    img = img.convert('RGBA')
-                                white_bg.paste(img, mask=img.split()[3])
-                                img = white_bg
-                            else:
-                                # If no transparency, just convert to RGB
-                                img = img.convert('RGB')
-                            
-                            # Generate image filename
-                            image_id = f'image_{len(images)}'
-                            image_filename = f'{image_id}.jpeg'
-                            image_filepath = images_dir / image_filename
-                            
-                            # Save as JPEG file
-                            img.save(image_filepath, format='JPEG', quality=85)
-                            
-                        except Exception as e:
-                            print(f"Error converting image to JPEG: {e}")
-                            continue
-                        
-                        # Find caption
-                        caption = None
-                        next_elem = element.getnext()
-                        if next_elem is not None and next_elem.tag == f'{{{namespace["w"]}}}p':
-                            caption_text = ''.join(next_elem.itertext())
-                            if caption_text.lower().startswith('figure'):
-                                caption = clean_xml_and_b64(caption_text)
-
-                        image_info = {
-                            'id': image_id,
-                            'path': str(image_filepath.relative_to(output_dir)),  # Store relative path
-                            'format': 'jpeg',
-                            'position': {'start': position_counter, 'end': position_counter},
-                            'caption': caption
-                        }
-                        images.append(image_info)
-                        
-                    except KeyError:
-                        continue
-    
-    except KeyError:
-        pass
-    
-    return images
-
-
 def extract_section_text(full_text: str, start_match: str, end_match: str, section_type: str = None) -> Union[str, List[Dict[str, str]]]:
     """Helper function to extract text between start and end match strings."""
     try:
@@ -311,19 +210,59 @@ def extract_section_text(full_text: str, start_match: str, end_match: str, secti
         text = full_text[start_idx:end_idx].strip()
         return text
     except ValueError:
+        logging.warning(f"Could not find match strings for section {section_type}")
         return ""
 
 
-def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False, include_formatting: bool = True) -> Union[Dict, str]:
+def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
     # Create output directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     paper_title = Path(file_path).stem
-    output_dir = Path('processed_documents') / f"{paper_title}_{timestamp}"
+    # Remove duplicate 'processed_documents' by using an absolute base path
+    base_dir = Path('processed_documents').resolve()
+    output_dir = base_dir / f"{paper_title}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     document_history = {}
     
+    # Convert DOCX to PDF using pypandoc
+    pdf_path = output_dir / f"{paper_title}.pdf"
+    full_text = ""
+    try:
+        pypandoc.convert_file(
+            str(Path(file_path).absolute()),
+            "pdf",
+            outputfile=str(pdf_path.absolute()),
+            extra_args=[
+                "--pdf-engine=xelatex",
+                "-V", "mainfont=DejaVu Sans",
+                "-V", "mathfont=DejaVu Math TeX Gyre"
+            ]
+        )
+            
+        pdf_extractor = PDFTextExtractor(lm=lm)
+        markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
+        
+        print(f"markdown created @ {markdown_path}")
+
+        if not markdown_path:
+            raise ValueError("PDF extraction failed - no markdown path returned")
+
+        with open(markdown_path, 'r', encoding='utf-8') as f:
+            markdown_text = f.read()
+            if not markdown_text.strip():
+                raise ValueError("Extracted markdown is empty")
+            full_text = markdown_text
+            document_history['markdown'] = markdown_text
+    except Exception as e:
+        print(f"Error in PDF processing: {e}")
+        return None
+
+    if not full_text:
+        print("No text was extracted from the document")
+        return None
+        
     with zipfile.ZipFile(file_path, 'r') as docx:
         document_xml = docx.read('word/document.xml')
         tree = etree.fromstring(document_xml)
@@ -331,74 +270,6 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
             'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
         }
-
-        # Build full text with heading level tracking
-        full_text = []
-        current_section = {'level': 0, 'start': 0, 'text': ''}
-        sections = []
-        
-        for element in tree.iter():
-            if element.tag == f'{{{namespace["w"]}}}p':  # Paragraph
-                # Check for heading style
-                style_element = element.find(f'.//{{{namespace["w"]}}}pStyle', namespace)
-                heading_level = 0
-                
-                if style_element is not None:
-                    style = style_element.get(f'{{{namespace["w"]}}}val')
-                    # Extract heading level from style (Heading1, Heading2, etc.)
-                    if style and style.lower().startswith('heading'):
-                        try:
-                            heading_level = int(style[-1])
-                        except ValueError:
-                            heading_level = 0
-                
-                # If we found a heading
-                if heading_level > 0:
-                    # Store previous section if it exists
-                    if current_section['text']:
-                        sections.append({
-                            'type': f'level_{current_section["level"]}',
-                            'text': current_section['text'].strip(),
-                            'match_strings': {
-                                'start': current_section['text'].split('\n')[0],
-                                'end': current_section['text'].split('\n')[-1]
-                            }
-                        })
-                    
-                    # Start new section
-                    current_section = {
-                        'level': heading_level,
-                        'start': len(''.join(full_text)),
-                        'text': ''
-                    }
-                    
-                    # Add markdown heading markers
-                    full_text.append(f"\n{'#' * heading_level} ")
-                else:
-                    full_text.append('\n')
-                
-            elif element.tag == f'{{{namespace["w"]}}}t':  # Text
-                text = element.text if element.text else ''
-                full_text.append(text)
-                current_section['text'] += text
-        
-        # Add final section
-        if current_section['text']:
-            sections.append({
-                'type': f'level_{current_section["level"]}',
-                'text': current_section['text'].strip(),
-                'match_strings': {
-                    'start': current_section['text'].split('\n')[0],
-                    'end': current_section['text'].split('\n')[-1]
-                }
-            })
-        
-        full_text = ''.join(full_text)
-        # Remove multiple newlines
-        full_text = re.sub(r'\n{3,}', '\n\n', full_text)
-        
-        # Clean citations from the full text
-        #full_text = clean_citations(full_text)
 
         # Initialize document history
         document_history = {
@@ -412,7 +283,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             'revisions': []
         }
 
-        # First, find all comment reference marks and their positions
+        # Find all comment reference marks and their positions
         comment_positions = {}
         position_counter = 0
         
@@ -534,27 +405,51 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         document_history['metadata']['last_modified'] = None
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
-        # After extracting full_text, identify sections
+        # After extracting full_text from PDF, identify sections
         section_identifier = SingleContextSectionIdentifier(engine=lm)
-        sections = section_identifier.process_document(full_text)
-        
-        # Add the actual text to each section
-        for section in sections:
-            start_match = section['match_strings']['start']
-            end_match = section['match_strings']['end']
-            section['text'] = extract_section_text(
-                full_text, 
-                start_match, 
-                end_match,
-                section_type=section['type']
-            )
-        
-        # # Add sections to document_history
-        document_history['sections'] = sections
+        try:
+            # Add debug logging
+            logger.info("About to call section_identifier.process_document")
+            sections = section_identifier.process_document(full_text)
+            logger.info(f"Type of sections returned: {type(sections)}")
+            logger.info(f"Content of sections: {sections}")
+            
+            # If sections is a dict, try to extract the list
+            if isinstance(sections, dict):
+                logger.info("Sections is a dict, trying to extract list")
+                if 'sections' in sections:
+                    sections = sections['sections']
+                    logger.info(f"Extracted sections list: {sections}")
+            
+            if not isinstance(sections, list):
+                logger.error(f"Still not a list after extraction: {type(sections)}")
+                document_history['sections'] = []
+                return document_history
+            
+            # Add the text content to each section
+            for section in sections:
+                try:
+                    start_match = section['match_strings']['start']
+                    end_match = section['match_strings']['end']
+                    section['text'] = extract_section_text(
+                        full_text, 
+                        start_match, 
+                        end_match,
+                        section_type=section['type']
+                    )
+                except Exception as e:
+                    logger.error(f"Error extracting text for section {section.get('type', 'unknown')}: {e}")
+            
+            # Assign the modified sections directly to document_history
+            document_history['sections'] = sections
+            
+        except Exception as e:
+            logger.error(f"Error in section processing: {str(e)}")
+            logger.exception("Full traceback:")  # Add full traceback
+            document_history['sections'] = []
         
         # Extract tables and images
         document_history['tables'] = extract_tables(tree, namespace, position_counter)
-        document_history['images'] = extract_images(docx, tree, namespace, position_counter, output_dir)
 
         # Create clean document structure
         document_history = {
@@ -563,15 +458,10 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
                 'last_modified': document_history['metadata']['last_modified'],
                 'contributors': document_history['metadata']['contributors']
             },
-            'sections': [{
-                'type': section['type'],
-                'text': section['text'],
-                'match_strings': section['match_strings']
-            } for section in sections],
+            'sections': document_history['sections'],
             'comments': document_history['comments'],
             'revisions': document_history['revisions'],
-            'tables': document_history['tables'],
-            'images': document_history['images']
+            'tables': document_history['tables']
         }
 
         # Write to file if requested
@@ -587,22 +477,36 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
 if __name__ == "__main__":
     import os, json
     
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Create logger for this module
+    logger = logging.getLogger(__name__)
+    
     openrouter_model = 'openrouter/openai/gpt-4o'
     
     # Initialize and run
+    logger.info("Initializing LM with OpenRouter")
     lm = dspy.LM(
         openrouter_model,
         api_base="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
         temperature=0.01,
     )
+    dspy.settings.configure(lm=lm)
     
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
-    # document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm, include_formatting=True)
+    logger.info("Starting document extraction")
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm)
+    # document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm)
     
     # Print summary of processed file
     output_dir = Path('processed_documents')
     processed_file = output_dir / f"ScolioticFEPaper_v7_processed2.txt"
     
+    logger.info("Document processing complete. Printing results...")
     print(json.dumps(document_history, indent=4))
     

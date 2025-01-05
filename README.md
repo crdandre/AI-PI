@@ -13,6 +13,10 @@ This design of this framework was inspired primarily by [STORM](https://github.c
 2. `python3 -m venv .venv && pip install -e .`
 3. If installing the frontend, `cd frontend`, `npm install` or install with your package manager of choice, `npm run dev`
 
+apt-get installs:
+1. pandoc
+2. texlive-xetex
+
 ## Usage
 ### CLI
 `python -m src.ai_pi.workflow -i path/to/input_file.docx -o path/to/output_folder`
