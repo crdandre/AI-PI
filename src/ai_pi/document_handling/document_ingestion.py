@@ -16,6 +16,7 @@ from datetime import datetime
 import os
 import pypandoc
 import logging
+import json
 
 from src.ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
 from src.ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
@@ -371,7 +372,6 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             logger.info("About to call section_identifier.process_document")
             sections = section_identifier.process_document(full_text)
             logger.info(f"Type of sections returned: {type(sections)}")
-            logger.info(f"Content of sections: {sections}")
             
             # If sections is a dict, try to extract the list
             if isinstance(sections, dict):

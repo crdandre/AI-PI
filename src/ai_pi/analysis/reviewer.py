@@ -271,13 +271,9 @@ class Reviewer(dspy.Module):
                     context=paper_context.get('paper_summary', '')
                 )
                 
-                # Store section_type in the result for validation
-                result.inputs = {'section_type': section_type}
-                
-                try:
-                    items = json.loads(result.review_items) if isinstance(result.review_items, str) else result.review_items
-                except json.JSONDecodeError:
-                    items = ast.literal_eval(result.review_items) if isinstance(result.review_items, str) else result.review_items
+                # Validate and filter review items based on section type
+                items = json.loads(result.review_items) if isinstance(result.review_items, str) else result.review_items
+                filtered_items = self._validate_section_specific_feedback(items, section_type.lower())
                 
                 review_data = {
                     'match_strings': [],
@@ -287,7 +283,7 @@ class Reviewer(dspy.Module):
                     'reflection': result.reflection
                 }
                 
-                for item in items:
+                for item in filtered_items:
                     review_data['match_strings'].append(item.get('match_text', ''))
                     review_data['comments'].append(item.get('comment', 'N/A'))
                     review_data['revisions'].append(item.get('revision', 'N/A'))
@@ -297,6 +293,34 @@ class Reviewer(dspy.Module):
         except Exception as e:
             logger.error(f"Error in forward method: {str(e)}")
             return self._create_empty_review()
+
+    def _validate_section_specific_feedback(self, review_items: list, section_type: str) -> list:
+        """Filter review items based on section-specific criteria."""
+        if section_type not in self.section_criteria:
+            logger.warning(f"Unknown section type: {section_type}")
+            return review_items
+        
+        criteria = self.section_criteria[section_type]
+        filtered_items = []
+        
+        for item in review_items:
+            comment = item.get('comment', '').lower()
+            revision = item.get('revision', '').lower()
+            
+            # Check if comment contains any terms to avoid
+            should_avoid = any(avoid_term in comment or avoid_term in revision 
+                             for avoid_term in criteria['avoid'])
+            
+            # Check if comment contains focus terms
+            has_focus = any(focus_term in comment or focus_term in revision 
+                           for focus_term in criteria['focus'])
+            
+            if has_focus and not should_avoid:
+                filtered_items.append(item)
+            else:
+                logger.debug(f"Filtered out review item for {section_type}: {item}")
+        
+        return filtered_items
 
     #TODO: add validation to increase depth and usefulness of feedback
     # and avoid superficial comments (this is like an internal reflection loop)

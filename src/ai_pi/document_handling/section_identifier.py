@@ -252,9 +252,7 @@ if __name__ == "__main__":
     )
     identifier = SingleContextSectionIdentifier(engine=lm)
     sections = identifier.process_document(text=paper_text)
-    
-    print(sections)
-    
+        
     # Print results with proper encoding
     print(json.dumps(sections, indent=4, ensure_ascii=False))
 

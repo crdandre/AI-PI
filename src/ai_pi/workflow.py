@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import dspy
+import json
 
 from ai_pi.analysis.summarizer import Summarizer
 from ai_pi.analysis.reviewer import Reviewer
@@ -58,14 +59,23 @@ class PaperReview:
         self.logger.info(f"Starting review of document: {input_doc_path}")
         
         try:
-            # Extract document content with enhanced error handling
+            # Create default output directory structure
+            paper_title = Path(input_doc_path).stem
+            base_dir = Path('processed_documents').resolve()
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_dir = base_dir / f"{paper_title}_{timestamp}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Extract document content
             document_history = extract_document_history(
                 input_doc_path,
                 lm=self.summarizer.lm,
-                write_to_file=False
+                write_to_file=False  # Changed to False - we'll write after review
             )
-            self.logger.debug(f"Successfully extracted document content")
             
+            if not document_history:
+                raise ValueError("Document extraction failed - no content returned")
+
             # Validate document_history structure
             if not isinstance(document_history, dict):
                 raise ValueError(f"Invalid document_history format: {type(document_history)}")
@@ -83,20 +93,37 @@ class PaperReview:
             self.logger.info("Starting document review...")
             reviewed_document = self.section_reviewer.review_document(document_history)
             
-            # Generate output document if path provided
-            if output_path:
-                self.logger.info(f"Generating reviewed document at: {output_path}")
-                output_commented_document(
-                    input_doc_path=input_doc_path,
-                    document_review_items=reviewed_document['reviews'],
-                    output_doc_path=output_path
-                )
-                self.logger.debug("Document generation complete")
+            # Now write the complete reviewed document to JSON
+            output_json = output_dir / f"{paper_title}_reviewed.json"
+            with open(output_json, 'w', encoding='utf-8') as f:
+                json.dump(reviewed_document, f, indent=4)
+            self.logger.info(f"Complete review written to: {output_json}")
+            
+            # Generate output document
+            if not output_path:
+                output_path = output_dir / f"{paper_title}_reviewed.docx"
+            else:
+                output_path = output_dir / Path(output_path).name
+            
+            self.logger.info(f"Generating reviewed document at: {output_path}")
+            output_commented_document(
+                input_doc_path=input_doc_path,
+                document_review_items=reviewed_document['reviews'],
+                output_doc_path=output_path
+            )
+            self.logger.debug("Document generation complete")
             
             return {
                 'paper_context': document_structure['hierarchical_summary']['document_summary']['document_analysis'],
                 'document_structure': document_structure,
-                'reviews': reviewed_document['reviews']
+                'reviews': reviewed_document['reviews'],
+                'output_dir': str(output_dir),
+                'output_files': {
+                    'pdf': str(output_dir / f"{paper_title}.pdf"),
+                    'markdown': str(output_dir / f"{paper_title}.md"),
+                    'json': str(output_json),
+                    'reviewed_docx': str(output_path)
+                }
             }
             
         except Exception as e:
