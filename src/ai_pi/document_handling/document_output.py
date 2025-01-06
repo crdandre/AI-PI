@@ -92,9 +92,15 @@ def output_commented_document(input_doc_path, document_review_items, output_doc_
     # Create new document for output
     doc = docx.Document()
     
-    # Add high-level review if provided
-    if 'high_level_review' in document_review_items:
-        add_high_level_review(doc, document_review_items['high_level_review'])
+    # Add high-level review from final_review if it exists
+    if 'final_review' in document_review_items:
+        high_level_review = {
+            'overall_assessment': document_review_items['final_review']['overall_assessment'],
+            'key_strengths': document_review_items['final_review']['key_strengths'],
+            'key_weaknesses': document_review_items['final_review']['key_weaknesses'],
+            'recommendations': document_review_items['final_review']['recommendations']
+        }
+        add_high_level_review(doc, high_level_review)
     
     # Load and append original document
     original_doc = docx.Document(input_doc_path)

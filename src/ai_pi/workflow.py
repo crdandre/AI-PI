@@ -54,7 +54,7 @@ class PaperReview:
         console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
     
-    def review_paper(self, input_doc_path: str, output_path: str = None) -> dict:
+    def review_paper(self, input_doc_path: str) -> dict:
         """Two-step review process with proper section handling"""
         self.logger.info(f"Starting review of document: {input_doc_path}")
         
@@ -70,7 +70,7 @@ class PaperReview:
             document_history = extract_document_history(
                 input_doc_path,
                 lm=self.summarizer.lm,
-                write_to_file=False  # Changed to False - we'll write after review
+                write_to_file=False
             )
             
             if not document_history:
@@ -99,11 +99,8 @@ class PaperReview:
                 json.dump(reviewed_document, f, indent=4)
             self.logger.info(f"Complete review written to: {output_json}")
             
-            # Generate output document
-            if not output_path:
-                output_path = output_dir / f"{paper_title}_reviewed.docx"
-            else:
-                output_path = output_dir / Path(output_path).name
+            # Generate output document with matching name pattern
+            output_path = output_dir / f"{paper_title}_reviewed.docx"
             
             self.logger.info(f"Generating reviewed document at: {output_path}")
             output_commented_document(
@@ -132,11 +129,9 @@ class PaperReview:
 
 
 if __name__ == "__main__":
-    
     # Example usage - using the same paths as document_output.py test    
     input_path = "examples/ScolioticFEPaper_v7.docx"
     # input_path = "examples/example_abstract.docx"
-    output_path = "examples/test_output_workflow2.docx"
 
     lm = dspy.LM('openai/gpt-4o')
     
@@ -147,10 +142,7 @@ if __name__ == "__main__":
     )
     
     try:
-        output = paper_review.review_paper(
-            input_doc_path=input_path,
-            output_path=output_path
-        )
-        print(f"Successfully created reviewed document at {output_path}")
+        output = paper_review.review_paper(input_doc_path=input_path)
+        print(f"Successfully created reviewed document")
     except Exception as e:
         print(f"Error processing document: {str(e)}")
