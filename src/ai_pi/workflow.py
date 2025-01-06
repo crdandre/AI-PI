@@ -133,7 +133,17 @@ if __name__ == "__main__":
     input_path = "examples/ScolioticFEPaper_v7.docx"
     # input_path = "examples/example_abstract.docx"
 
-    lm = dspy.LM('openai/gpt-4o')
+    # openrouter_model = 'openrouter/openai/gpt-4o'
+    openrouter_model = 'openrouter/anthropic/claude-3.5-sonnet:beta'
+    
+    # Initialize and run
+    lm = dspy.LM(
+        openrouter_model,
+        api_base="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        temperature=0.9,
+    )
+    dspy.settings.configure(lm=lm)
     
     paper_review = PaperReview(
         lm=lm,
