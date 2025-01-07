@@ -12,17 +12,14 @@ from ai_pi.document_handling.document_ingestion import extract_document_history
 
 
 class PaperReview:
-    def __init__(self, lm, verbose=False, log_dir="logs", reviewer_class="Predict"):
-        """Initialize with DSPy LM:
-        - lm: DSPy LM for both summarizer and reviewer
-        - reviewer_class: Type of reviewer to use ("ReAct", "ChainOfThought", or "Predict")
-        """
-        self.summarizer = Summarizer(lm=lm, verbose=verbose)
+    def __init__(self, verbose=False, log_dir="logs", reviewer_class="Predict"):
+        """Initialize components using task-specific LM configurations from lm_config.py"""
+        # Initialize components with task-specific LMs
+        self.summarizer = Summarizer(verbose=verbose)  # Will use summarization LM config
         self.section_reviewer = Reviewer(
-            engine=lm,
             reviewer_class=reviewer_class,
             verbose=verbose
-        )
+        )  # Will use review LM config
         
         self.verbose = verbose
         
@@ -69,7 +66,6 @@ class PaperReview:
             # Extract document content
             document_history = extract_document_history(
                 input_doc_path,
-                lm=self.summarizer.lm,
                 write_to_file=False
             )
             
@@ -129,35 +125,10 @@ class PaperReview:
 
 
 if __name__ == "__main__":
-    # Example usage - using the same paths as document_output.py test    
+    # Example usage with different configuration approaches
     input_path = "examples/ScolioticFEPaper_v7.docx"
-    # input_path = "examples/example_abstract.docx"
-
-    # # openrouter_model = 'openrouter/openai/gpt-4o'
-    # openrouter_model = 'openrouter/anthropic/claude-3.5-sonnet:beta'
     
-    # # Initialize and run
-    # lm = dspy.LM(
-    #     openrouter_model,
-    #     api_base="https://openrouter.ai/api/v1",
-    #     api_key=os.getenv("OPENROUTER_API_KEY"),
-    #     temperature=0.9,
-    # )
-    
-    ollama_model = "ollama_chat/qwq:latest"
-    lm = dspy.LM(
-        model=ollama_model,
-        api_base="http://localhost:11434",
-        temperature=0.9,
-    )
-    
-    dspy.settings.configure(lm=lm)
-    
-    paper_review = PaperReview(
-        lm=lm,
-        verbose=True,
-        reviewer_class="Predict",
-    )
+    paper_review = PaperReview(verbose=True)
     
     try:
         output = paper_review.review_paper(input_doc_path=input_path)

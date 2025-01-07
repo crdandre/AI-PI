@@ -1,10 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
-from llama_index.llms.nvidia import NVIDIA
-from llama_index.core import Document
-from llama_index.core.node_parser import SentenceSplitter
 from typing import List, Dict
 import dspy
+from ..lm_config import get_lm_for_task
 
 class SectionSummary(dspy.Signature):
     """Signature for section summarization"""
@@ -29,17 +27,22 @@ class Summarizer:
     how PIs review papers. Creates true summary trees where parent nodes
     summarize their children.
     """
-    def __init__(
-        self,
-        lm=None,  # Now accepts a DSPy language model
-        verbose=False
-    ):
-        self.lm = lm
+    def __init__(self, lm: dspy.LM = None, verbose=False):
+        """
+        Initialize summarizer with optional custom LM
+        Args:
+            lm: Optional dspy.LM instance (falls back to default if None)
+            verbose: Enable detailed logging
+        """
+        # If LM is provided directly, use it; otherwise get default
+        self.lm = lm if isinstance(lm, dspy.LM) else get_lm_for_task("summarization")
         self.verbose = verbose
-        # Initialize predictors
-        self.section_predictor = dspy.ChainOfThought(SectionSummary)
-        self.relationship_predictor = dspy.ChainOfThought(RelationshipAnalysis)
-        self.document_predictor = dspy.ChainOfThought(DocumentAnalysis)
+        
+        # Initialize predictors with the configured LM
+        with dspy.context(lm=self.lm):
+            self.section_predictor = dspy.ChainOfThought(SectionSummary)
+            self.relationship_predictor = dspy.ChainOfThought(RelationshipAnalysis)
+            self.document_predictor = dspy.ChainOfThought(DocumentAnalysis)
     
     def analyze_sectioned_document(self, document_json: dict) -> dict:
         """

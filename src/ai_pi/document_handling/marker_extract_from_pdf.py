@@ -19,6 +19,7 @@ import re
 import dspy
 import json
 import time
+from ..lm_config import get_lm_for_task
 
 
 # Create signatures for image analysis
@@ -78,15 +79,24 @@ class MarkdownSegmenter(dspy.Signature):
 class PDFTextExtractor:
     def __init__(
         self,
-        lm,
         output_folder: str = None,
-        format: str = "markdown"
+        format: str = "markdown",
+        image_caption_lm=None,
+        caption_analysis_lm=None,
+        caption_combination_lm=None,
+        markdown_segmentation_lm=None
     ):
         logging.info("Initializing PDFTextExtractor")
         self.output_folder = output_folder
         self.format = format
-        self.lm = lm
-        self.caption_status = {}  # Track caption status for each image
+        
+        # Task-specific LMs
+        self.image_caption_lm = get_lm_for_task("image_caption_extraction") if image_caption_lm is None else image_caption_lm
+        self.caption_analysis_lm = get_lm_for_task("caption_analysis") if caption_analysis_lm is None else caption_analysis_lm
+        self.caption_combination_lm = get_lm_for_task("caption_combination") if caption_combination_lm is None else caption_combination_lm
+        self.markdown_segmentation_lm = get_lm_for_task("markdown_segmentation") if markdown_segmentation_lm is None else markdown_segmentation_lm
+        
+        self.caption_status = {}
 
     def extract_pdf(self, input_pdf_path: str) -> str:
         """Extract text from a single PDF file and convert to markdown using LLM."""
@@ -182,7 +192,7 @@ class PDFTextExtractor:
             next_line = lines[i + 1] if i + 1 < len(lines) else ""
             
             # Analyze the next line for caption content
-            analyzer = dspy.Predict(CaptionAnalyzer, lm=self.lm)
+            analyzer = dspy.Predict(CaptionAnalyzer, lm=self.caption_analysis_lm)
             analysis_string = analyzer(text=next_line).answer
             logging.info("analysis_string obtained")
             analysis = json.loads(analysis_string)
@@ -194,7 +204,7 @@ class PDFTextExtractor:
                 i += 2  # Skip past image and caption
             else:
                 # Extract caption from image
-                extractor = dspy.Predict(ImageCaptionExtractor, lm=self.lm)
+                extractor = dspy.Predict(ImageCaptionExtractor, lm=self.image_caption_lm)
                 image_caption = extractor(
                     image=dspy.Image.from_file(full_image_path),
                     question="Extract any figure caption text from this image."
@@ -244,22 +254,11 @@ if __name__ == "__main__":
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Configure OpenRouter LLM
-    openrouter_model = 'openrouter/openai/gpt-4o-mini'
-    lm = dspy.LM(
-        openrouter_model,
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.01,
-    )
-    dspy.settings.configure(lm=lm)
-    
     filename = "mmapis.pdf"
     pdf_path = f"/home/christian/projects/agents/ai_pi/examples/{filename}"
     output_folder = f"/home/christian/projects/agents/ai_pi/examples/mmapis"
     
     extractor = PDFTextExtractor(
-        lm=lm,
         output_folder=output_folder,
         format="markdown"
     )
