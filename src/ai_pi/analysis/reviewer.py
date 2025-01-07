@@ -5,7 +5,7 @@ and revisions, simulating the style of feedback a PI would give when reviewing a
 import dspy
 import json
 import logging
-import ast
+from ..lm_config import get_lm_for_task, LMConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -116,10 +116,11 @@ class Reviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
     
     def __init__(self, 
-                 engine: dspy.dsp.LM, 
+                 engine: LMConfig = None,
                  reviewer_class: str = "ReAct",
                  verbose: bool = False):
         super().__init__()
+        self.engine = get_lm_for_task("review", engine)
         
         # Initialize predict tool with proper signature
         predict_tool = dspy.Predict(ReviewerSignature)
@@ -165,7 +166,6 @@ class Reviewer(dspy.Module):
             ]
         }
         
-        self.engine = engine
         self.verbose = verbose
         
         # Add section-specific validation criteria as class attribute

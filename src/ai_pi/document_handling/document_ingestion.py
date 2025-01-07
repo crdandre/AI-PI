@@ -11,9 +11,7 @@ from lxml import etree
 import zipfile
 from typing import Dict, List, Optional, TypedDict, Union
 from pathlib import Path
-import dspy
 from datetime import datetime
-import os
 import pypandoc
 import logging
 import json
@@ -174,8 +172,9 @@ def extract_section_text(full_text: str, start_match: str, end_match: str, secti
         return ""
 
 
-def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: bool = False) -> Union[Dict, str]:
+def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
+    
     # Create output directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     paper_title = Path(file_path).stem
@@ -201,7 +200,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
             ]
         )
             
-        pdf_extractor = PDFTextExtractor(lm=lm)
+        pdf_extractor = PDFTextExtractor()
         markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
         
         print(f"markdown created @ {markdown_path}")
@@ -366,7 +365,7 @@ def extract_document_history(file_path: str, lm: dspy.LM = None, write_to_file: 
         document_history['metadata']['contributors'] = list(document_history['metadata']['contributors'])
         
         # After extracting full_text from PDF, identify sections
-        section_identifier = SingleContextSectionIdentifier(engine=lm)
+        section_identifier = SingleContextSectionIdentifier()
         try:
             # Use logger that's now defined
             logger.info("About to call section_identifier.process_document")
@@ -483,28 +482,11 @@ if __name__ == "__main__":
     
     # Create logger for this module
     logger = logging.getLogger(__name__)
-    
-    # openrouter_model = 'openrouter/openai/gpt-4o'
-    openrouter_model = 'openrouter/anthropic/claude-3.5-sonnet:beta'
-    
-    # Initialize and run
-    logger.info("Initializing LM with OpenRouter")
-    lm = dspy.LM(
-        openrouter_model,
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.01,
-    )
-    dspy.settings.configure(lm=lm)
-    
+        
     logger.info("Starting document extraction")
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False, lm=lm)
-    # document_history = extract_document_history("examples/NormativeFEPaper_v7.docx", write_to_file=False, lm=lm)
+    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False)
     
     # Print summary of processed file
-    output_dir = Path('processed_documents')
-    processed_file = output_dir / f"ScolioticFEPaper_v7_processed2.txt"
-    
     logger.info("Document processing complete. Printing results...")
     print(json.dumps(document_history, indent=4))
     

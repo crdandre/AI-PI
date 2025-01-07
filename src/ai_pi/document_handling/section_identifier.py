@@ -1,10 +1,11 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional, Union
 import dspy
 import logging
 import json
 import re
 from json.decoder import JSONDecodeError
 from .text_utils import normalize_unicode, clean_markdown
+from ..lm_config import get_lm_for_task, LMConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
@@ -35,6 +36,12 @@ class DocumentSections(dspy.Signature):
     """Input/Output signature for document section identification"""
     text = dspy.InputField(desc="The academic paper text to analyze")
     sections = dspy.OutputField(desc="List of sections in the document", type=List[SectionInfo])
+
+class ExtractSectionBoundaries(dspy.Signature):
+    """Signature for extracting exact boundary text from a section"""
+    section_text = dspy.InputField(desc="The full text of the academic paper section")
+    start_text = dspy.OutputField(desc="The exact first 10-15 words from the section's beginning")
+    end_text = dspy.OutputField(desc="The exact last 10-15 words from the section's end")
 
 def _clean_and_parse_json(json_str: str) -> List[Dict]:
     """Helper function to clean and parse potentially malformed JSON from LLM output."""
@@ -67,10 +74,10 @@ class SingleContextSectionIdentifier:
     2. Extract main sections with their boundary strings
     """
     
-    def __init__(self, engine: dspy.LM):
-        self.engine = engine
+    def __init__(self, lm: Union[LMConfig, dspy.LM] = None):
+        self.lm = get_lm_for_task("section_identification") if lm is None else lm
         self.structure_predictor = dspy.ChainOfThought(DocumentStructure)
-        self.section_predictor = dspy.ChainOfThought(DocumentSections)
+        self.boundary_predictor = dspy.ChainOfThought(ExtractSectionBoundaries)
     
     def _clean_markdown(self, text: str) -> str:
         return clean_markdown(text)
@@ -93,7 +100,7 @@ class SingleContextSectionIdentifier:
                     })
             
             # Use LLM to classify the headings
-            with dspy.context(lm=self.engine):
+            with dspy.context(lm=self.lm):
                 prompt = f"""You are analyzing headings from an academic paper.
                     
                     For each heading, output a JSON object with:
@@ -178,32 +185,18 @@ class SingleContextSectionIdentifier:
                 # Get section text and normalize Unicode
                 section_text = normalize_unicode('\n'.join(lines[start_line:end_line]).strip())
                 
-                with dspy.context(lm=self.engine):
-                    prompt = f"""Given this section from an academic paper, extract the exact beginning and ending text.
-
-Instructions:
-- Find the EXACT first 10-15 words from the section's beginning
-- Find the EXACT last 10-15 words from the section's end
-- Return these exact text snippets, not descriptions or categories
-
-Section text:
-{section_text}
-
-Return the exact text snippets found in the section."""
-
-                    # Use simplified SectionInfo signature
-                    self.section_predictor = dspy.ChainOfThought(SectionInfo)
-                    result = self.section_predictor(text=section_text)
+                with dspy.context(lm=self.lm):
+                    # Replace the text prompt with the signature-based approach
+                    result = self.boundary_predictor(section_text=section_text)
                     
                     try:
-                        # Create section info with normalized text
                         section_info = {
                             'section_type': heading['section_type'],
                             'match_strings': {
                                 'start': normalize_unicode(str(result.start_text).strip()),
                                 'end': normalize_unicode(str(result.end_text).strip())
                             },
-                            'text': normalize_unicode(section_text)  # Add normalized full text
+                            'text': normalize_unicode(section_text)
                         }
                         processed_sections.append(section_info)
                         
@@ -233,7 +226,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     # Use specific file path
-    paper_path = Path("//home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250105_175315/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")  
+    paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")  
     with open(paper_path, 'r', encoding='utf-8') as f:
         paper_text = f.read()
         
@@ -248,9 +241,9 @@ if __name__ == "__main__":
         openrouter_model,
         api_base="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.01,
+        temperature=0.9,
     )
-    identifier = SingleContextSectionIdentifier(engine=lm)
+    identifier = SingleContextSectionIdentifier(lm=lm)
     sections = identifier.process_document(text=paper_text)
         
     # Print results with proper encoding
