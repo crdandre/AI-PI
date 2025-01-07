@@ -1,6 +1,9 @@
 """
 Configuration for language models used in different tasks.
 Enables per-task LM specification and fallback to default models.
+
+Notes:
+image_caption_extraction must be a multimodal model such as 4o, llama3.2-vision
 """
 from dataclasses import dataclass
 import dspy
@@ -21,16 +24,21 @@ class LMConfig:
             temperature=self.temperature
         )
 
-# Default configurations for different tasks
+#ADD AS NEEDED        
+OPENROUTER_4O = LMConfig("openrouter/openai/gpt-4o")
+OPENROUTER_4O_MINI = LMConfig("openrouter/openai/gpt-4o-mini")
+OPENROUTER_SONNET = LMConfig("openrouter/anthropic/claude-3.5-sonnet:beta")
+OPENROUTER_DEEPSEEK_V3 = LMConfig("openrouter/deepseek/deepseek-chat")
+OPENROUTER_GEMINI_PRO = LMConfig("openrouter/google/learnlm-1.5-pro-experimental:free")
+
 DEFAULT_CONFIGS = {
-    "summarization": LMConfig("openrouter/openai/gpt-4o"),
-    "review": LMConfig("openrouter/anthropic/claude-3-opus"),
-    #image_caption_extraction must be at least dual-modal (image+text) to take image as input and return text
-    "image_caption_extraction": LMConfig("openrouter/openai/gpt-4o"),
-    "caption_analysis": LMConfig("openrouter/openai/gpt-4o"),
-    "caption_combination": LMConfig("openrouter/openai/gpt-4o"),
-    "markdown_segmentation": LMConfig("openrouter/openai/gpt-4o"),
-    "default": LMConfig("openrouter/openai/gpt-4o"),
+    "summarization":OPENROUTER_4O,
+    "review": OPENROUTER_4O_MINI,
+    "image_caption_extraction": OPENROUTER_4O,
+    "caption_analysis": OPENROUTER_4O,
+    "caption_combination": OPENROUTER_4O,
+    "markdown_segmentation": OPENROUTER_4O,
+    "default": OPENROUTER_4O,
 }
 
 def get_lm_for_task(task: str, custom_config: LMConfig = None) -> dspy.LM:

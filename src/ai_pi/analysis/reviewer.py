@@ -6,6 +6,8 @@ import dspy
 import json
 import logging
 from ..lm_config import get_lm_for_task, LMConfig
+from dataclasses import dataclass
+from typing import List, Dict, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -102,6 +104,11 @@ class ReviewerSignature(dspy.Signature):
     initial_analysis = dspy.OutputField(desc="Initial high-level analysis of scientific concerns")
     reflection = dspy.OutputField(desc="Self-reflection on whether feedback addresses core scientific issues")
     review_items = dspy.OutputField(desc="List of review items in JSON format", format=list[ReviewItem])
+    conceptual_framework = dspy.OutputField(desc="Analysis of how the section fits into broader theoretical framework")
+    methodology_assessment = dspy.OutputField(desc="Detailed assessment of methodological choices and alternatives")
+    impact_analysis = dspy.OutputField(desc="Analysis of potential impact and implications")
+    cross_references = dspy.OutputField(desc="Connections to other sections and related work")
+    knowledge_gaps = dspy.OutputField(desc="Identification of remaining knowledge gaps")
 
 class FinalReviewSignature(dspy.Signature):
     """Generate final synthesized review across all sections."""
@@ -112,37 +119,70 @@ class FinalReviewSignature(dspy.Signature):
     key_weaknesses = dspy.OutputField(desc="Major scientific weaknesses identified")
     recommendations = dspy.OutputField(desc="High-priority recommendations for improvement")
 
+@dataclass
+class ScoringMetrics:
+    """Standardized scoring metrics for paper evaluation"""
+    clarity: float
+    methodology: float
+    novelty: float
+    impact: float
+    presentation: float
+    literature_integration: float
+    
+    def to_dict(self) -> dict:
+        return {k: float(v) for k, v in self.__dict__.items()}
+
+@dataclass
+class SectionAnalysis:
+    """Detailed analysis of a paper section"""
+    section_type: str
+    content_summary: str
+    role_in_paper: str
+    key_points: List[str]
+    dependencies: List[str]
+    supports: List[str]
+    metrics: ScoringMetrics
+
+class ExtractComponent(dspy.Signature):
+    """Generic signature for extracting paper components"""
+    sections = dspy.InputField(desc="List of paper sections")
+    target = dspy.InputField(desc="Component to extract (e.g., 'research_problem', 'hypotheses')")
+    extracted = dspy.OutputField(desc="Extracted component")
+
+class AnalyzeComponent(dspy.Signature):
+    """Generic signature for analyzing paper components"""
+    content = dspy.InputField(desc="Content to analyze")
+    analysis_type = dspy.InputField(desc="Type of analysis (e.g., 'sections', 'metrics')")
+    analysis = dspy.OutputField(desc="Analysis results")
+
+class GenerateComponent(dspy.Signature):
+    """Generic signature for generating review components"""
+    content = dspy.InputField(desc="Content to analyze")
+    component_type = dspy.InputField(desc="Type to generate (e.g., 'strengths', 'suggestions')")
+    generated = dspy.OutputField(desc="Generated content")
+
+class ReviewMetrics(dspy.Signature):
+    """Signature for scoring paper sections"""
+    content = dspy.InputField(desc="Section content")
+    metrics = dspy.OutputField(desc="Metrics scores", format=ScoringMetrics)
+
 class Reviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
     
     def __init__(self, 
-                 engine: LMConfig = None,
-                 reviewer_class: str = "ReAct",
+                 lm: LMConfig = None,
                  verbose: bool = False):
         super().__init__()
-        self.engine = get_lm_for_task("review", engine)
+        self.lm = get_lm_for_task("review", lm)
+        self.paper_knowledge = None
         
-        # Initialize predict tool with proper signature
-        predict_tool = dspy.Predict(ReviewerSignature)
-        
-        # Map string names to reviewer classes
-        reviewer_classes = {
-            "ReAct": lambda sig: dspy.ReAct(
-                signature=sig,
-                tools=[predict_tool],
-                max_iters=5
-            ),
-            "ChainOfThought": dspy.ChainOfThought,
-            "Predict": dspy.Predict
-        }
-        
-        # Get reviewer class from mapping, default to Predict if not found
-        ReviewerClass = reviewer_classes.get(reviewer_class, dspy.Predict)
-        logger.info(f"Using reviewer class: {ReviewerClass.__name__}")
-        
-        # Initialize with signature
-        self.reviewer = ReviewerClass(ReviewerSignature)
-        self.final_reviewer = ReviewerClass(FinalReviewSignature)
+        # Simplify to use Predict directly
+        self.reviewer = dspy.Predict(ReviewerSignature)
+        self.final_reviewer = dspy.Predict(FinalReviewSignature)
+        self.extractor = dspy.Predict(ExtractComponent)
+        self.analyzer = dspy.Predict(AnalyzeComponent)
+        self.generator = dspy.Predict(GenerateComponent)
+        self.metrics_scorer = dspy.Predict(ReviewMetrics)
         
         # Add class type logging
         if verbose:
@@ -191,105 +231,191 @@ class Reviewer(dspy.Module):
                 'avoid': ['technical detail', 'extensive background', 'detailed method']
             }
         }
+        
+        # Add review quality criteria
+        self.review_quality_criteria = {
+            'depth': [
+                'theoretical foundation',
+                'methodological rationale',
+                'alternative approaches',
+                'limitations analysis',
+                'broader implications'
+            ],
+            'integration': [
+                'cross-section connections',
+                'literature synthesis',
+                'field positioning',
+                'future directions'
+            ],
+            'specificity': [
+                'concrete examples',
+                'detailed critiques',
+                'actionable suggestions',
+                'evidence-based assessment'
+            ],
+            'context_awareness': [
+                'cross_references',
+                'dependency_handling',
+                'support_validation'
+            ]
+        }
 
     def review_document(self, document_json: dict) -> dict:
-        """Main entry point for reviewing an entire document."""
+        """Enhanced review process that maintains global context"""
         try:
-            if self.verbose:
-                print("Starting document review...")
+            logger.info("Starting document review...")
             
-            # Extract context from hierarchical summary if available
-            paper_context = {
-                'paper_summary': document_json.get('hierarchical_summary', {})
-                    .get('document_summary', {})
-                    .get('document_analysis', '')
-            }
+            # 1. Build paper-wide understanding first
+            logger.info("Building paper knowledge...")
+            self.paper_knowledge = self._build_paper_knowledge(document_json)
             
-            # Review each section
+            # 2. Generate main review
+            logger.info("Generating main review...")
+            main_review = self._generate_main_review()
+            
+            # 3. Review individual sections with full context
+            logger.info("Reviewing individual sections...")
             section_reviews = []
             for section in document_json.get('sections', []):
-                review = self.review_section(section, paper_context=paper_context)
+                logger.info(f"Reviewing section: {section['section_type']}")
+                review = self.review_section({
+                    'text': section.get('content', ''),
+                    'section_type': section.get('section_type', '')
+                }, paper_context=self.paper_knowledge)
                 section_reviews.append({
                     'section_type': section['section_type'],
                     'review': review
                 })
             
-            # Compile final review
-            final_review = self.compile_final_review(section_reviews, paper_context)
-            
-            # Add reviews to document
+            # 4. Compile final document with single metrics output
             document_json['reviews'] = {
+                'main_review': main_review,
                 'section_reviews': section_reviews,
-                'final_review': final_review
+                'metrics': {
+                    'clarity': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).clarity,
+                    'methodology': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).methodology,
+                    'novelty': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).novelty,
+                    'impact': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).impact,
+                    'presentation': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).presentation,
+                    'literature_integration': self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0)).literature_integration
+                }
             }
             
             return document_json
-                
+            
         except Exception as e:
-            logger.error(f"Error reviewing document: {str(e)}")
-            return document_json
+            logger.error(f"Error reviewing document: {str(e)}", exc_info=True)
+            raise
 
-    def review_section(self, section: dict, paper_context: dict | str = None) -> dict:
-        """Review a single section from the document."""
+    def _build_paper_knowledge(self, document_json: dict) -> dict:
+        """Builds comprehensive paper understanding"""
         try:
-            if self.verbose:
-                print(f"Reviewing {section['section_type']} section...")
+            sections = document_json.get('sections', [])
+            extract_targets = ['research_problem', 'hypotheses', 'key_methods', 
+                             'main_findings', 'limitations']
             
-            # Extract section info
-            section_text = section['text']
-            section_type = section['section_type']
+            with dspy.context(lm=self.lm):
+                # Simplified direct predictions
+                components = {
+                    target: self.extractor(sections=sections, target=target).extracted
+                    for target in extract_targets
+                }
+                
+                components.update({
+                    'section_analyses': self.analyzer(content=sections, analysis_type='sections').analysis,
+                    'metrics': self.analyzer(content=sections, analysis_type='metrics').analysis
+                })
             
-            # Convert string context to dict if needed
-            if isinstance(paper_context, str):
-                paper_context = {'paper_summary': paper_context}
-            elif not isinstance(paper_context, dict):
-                paper_context = {'paper_summary': ''}
-
-            result = self.forward(section_text, section_type, paper_context)
-            
-            # Add match_strings from original section for reference
-            review = result.review if hasattr(result, 'review') else self._create_empty_review()['review']
-            review['original_match_strings'] = section.get('match_strings', {})
-            
-            return review
+            return components
                 
         except Exception as e:
-            logger.error(f"Error reviewing section: {str(e)}")
-            return self._create_empty_review()['review']
+            logger.error(f"Error building paper knowledge: {str(e)}")
+            return {}
+
+    def review_section(self, section: dict, paper_context: dict = None) -> dict:
+        """Reviews section using DSPy predictors"""
+        with dspy.context(lm=self.lm):
+            metrics = self.metrics_scorer(
+                content=section['text']
+            ).metrics
+            
+            analysis = self.analyzer(
+                content=section,
+                analysis_type='section_review'
+            ).analysis
+            
+            return {
+                'metrics': metrics,
+                'review': analysis
+            }
+
+    def _generate_main_review(self) -> dict:
+        """Generates the main review using DSPy predictors"""
+        with dspy.context(lm=self.lm):
+            return {
+                'key_strengths': self.generator(
+                    content=self.paper_knowledge,
+                    component_type='strengths'
+                ).generated,
+                'key_weaknesses': self.generator(
+                    content=self.paper_knowledge,
+                    component_type='weaknesses'
+                ).generated,
+                'global_suggestions': self.generator(
+                    content=self.paper_knowledge,
+                    component_type='suggestions'
+                ).generated
+            }
 
     def forward(self, section_text: str, section_type: str, paper_context: dict) -> dspy.Prediction:
-        """Review a section using chain-of-thought reasoning."""
+        """Enhanced review process with quality validation."""
         if not section_text or not section_type:
             logger.warning("Empty input received")
             return self._create_empty_review()
 
         try:
-            with dspy.settings.context(lm=self.engine):
-                result = self.reviewer(
-                    section_text=section_text,
-                    section_type=section_type,
-                    context=paper_context.get('paper_summary', '')
-                )
-                
-                # Validate and filter review items based on section type
-                items = json.loads(result.review_items) if isinstance(result.review_items, str) else result.review_items
-                filtered_items = self._validate_section_specific_feedback(items, section_type.lower())
-                
-                review_data = {
-                    'match_strings': [],
-                    'comments': [],
-                    'revisions': [],
-                    'initial_analysis': result.initial_analysis,
-                    'reflection': result.reflection
-                }
-                
-                for item in filtered_items:
-                    review_data['match_strings'].append(item.get('match_text', ''))
-                    review_data['comments'].append(item.get('comment', 'N/A'))
-                    review_data['revisions'].append(item.get('revision', 'N/A'))
-                
-                return dspy.Prediction(review=review_data)
-                
+            # Simplified direct prediction
+            result = self.reviewer(
+                section_text=str(section_text),
+                section_type=str(section_type),
+                context=str(paper_context.get('paper_summary', ''))
+            )
+            
+            # Validate and filter review items based on section type
+            items = json.loads(result.review_items) if isinstance(result.review_items, str) else result.review_items
+            filtered_items = self._validate_section_specific_feedback(items, section_type.lower())
+            
+            review_data = {
+                'match_strings': [],
+                'comments': [],
+                'revisions': [],
+                'initial_analysis': result.initial_analysis,
+                'reflection': result.reflection
+            }
+            
+            for item in filtered_items:
+                review_data['match_strings'].append(item.get('match_text', ''))
+                review_data['comments'].append(item.get('comment', 'N/A'))
+                review_data['revisions'].append(item.get('revision', 'N/A'))
+            
+            # Add quality validation step
+            meets_criteria, suggestions = self._validate_review_quality(filtered_items)
+            
+            if not meets_criteria:
+                # Request additional review iteration with quality improvements
+                with dspy.settings.context(lm=self.lm):
+                    improved_result = self.reviewer(
+                        section_text=section_text,
+                        section_type=section_type,
+                        context=f"{paper_context.get('paper_summary', '')} \n\nImprovement needed: {', '.join(suggestions)}"
+                    )
+                    filtered_items = self._validate_section_specific_feedback(
+                        improved_result.review_items, 
+                        section_type.lower()
+                    )
+            
+            return dspy.Prediction(review=review_data)
+            
         except Exception as e:
             logger.error(f"Error in forward method: {str(e)}")
             return self._create_empty_review()
@@ -322,11 +448,11 @@ class Reviewer(dspy.Module):
         
         return filtered_items
 
-    #TODO: add validation to increase depth and usefulness of feedback
-    # and avoid superficial comments (this is like an internal reflection loop)
-    # to improve itself
-    def _validate_scientific_depth(self, result) -> bool:
-        return True
+    # #TODO: add validation to increase depth and usefulness of feedback
+    # # and avoid superficial comments (this is like an internal reflection loop)
+    # # to improve itself
+    # def _validate_scientific_depth(self, result) -> bool:
+    #     return True
 
     def _create_empty_review(self) -> dspy.Prediction:
         return dspy.Prediction(review={'match_strings': [], 'comments': [], 'revisions': []})
@@ -334,7 +460,7 @@ class Reviewer(dspy.Module):
     def compile_final_review(self, section_analyses: list, paper_context: dict) -> dict:
         """Compile a final high-level review synthesizing all sections."""
         try:
-            with dspy.settings.context(lm=self.engine):
+            with dspy.settings.context(lm=self.lm):
                 final_review = self.final_reviewer(
                     section_analyses=section_analyses,
                     paper_context=paper_context
@@ -355,27 +481,74 @@ class Reviewer(dspy.Module):
                 'recommendations': [],
             }
 
+    def _validate_review_quality(self, review_items: list) -> tuple[bool, list]:
+        """Validate review quality against defined criteria."""
+        quality_scores = {
+            'depth': 0,
+            'integration': 0,
+            'specificity': 0
+        }
+        
+        improvement_suggestions = []
+        
+        # Analyze each review item against quality criteria
+        for item in review_items:
+            comment = item.get('comment', '').lower()
+            
+            # Check depth
+            depth_score = sum(1 for term in self.review_quality_criteria['depth'] 
+                            if term in comment)
+            quality_scores['depth'] += depth_score
+            
+            # Check integration
+            integration_score = sum(1 for term in self.review_quality_criteria['integration'] 
+                                 if term in comment)
+            quality_scores['integration'] += integration_score
+            
+            # Check specificity
+            specificity_score = sum(1 for term in self.review_quality_criteria['specificity'] 
+                                  if term in comment)
+            quality_scores['specificity'] += specificity_score
+        
+        # Generate improvement suggestions if scores are low
+        if quality_scores['depth'] < len(review_items):
+            improvement_suggestions.append("Deepen theoretical analysis and methodological critique")
+        if quality_scores['integration'] < len(review_items):
+            improvement_suggestions.append("Strengthen connections across sections and to broader literature")
+        if quality_scores['specificity'] < len(review_items):
+            improvement_suggestions.append("Provide more concrete examples and actionable suggestions")
+        
+        # Return True if all quality criteria meet minimum thresholds
+        meets_criteria = all(score >= len(review_items) * 0.5 
+                           for score in quality_scores.values())
+        
+        return meets_criteria, improvement_suggestions
+
+    def _identify_key_strengths(self) -> List[str]:
+        """Implement missing method"""
+        return []
+
+    def _identify_key_weaknesses(self) -> List[str]:
+        """Implement missing method"""
+        return []
+
+    def _generate_global_suggestions(self) -> List[str]:
+        """Implement missing method"""
+        return []
+
+    def _generate_section_specific_feedback(self) -> Dict:
+        """Implement missing method"""
+        return {}
+
 
 if __name__ == "__main__":
     import os
     import json
     
-    # Test the reviewer with DSPy's LM directly
-    lm = dspy.LM(
-        'openrouter/openai/gpt-4o',
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.7,
-    )
-    
-    reviewer = Reviewer(
-        engine=lm,
-        reviewer_class="Predict",
-        verbose=True,
-    )
+    reviewer = Reviewer(verbose=True)
     
     # Load and process sample document
-    with open("ref/sample_output.json", "r") as f:
+    with open("processed_documents/ScolioticFEPaper_v7_20250107_011921/ScolioticFEPaper_v7_reviewed.json", "r") as f:
         document = json.load(f)
     
     # Review entire document

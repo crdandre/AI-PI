@@ -68,14 +68,48 @@ def _clean_and_parse_json(json_str: str) -> List[Dict]:
             logger.debug(f"Problematic JSON string: {cleaned}")
             return []
 
+class SectionTypes:
+    """Dynamic section type management"""
+    
+    # Base sections that can be extended
+    DEFAULT_SECTIONS = {
+        'Abstract': ['abstract', 'summary'],
+        'Introduction': ['introduction', 'background'],
+        'Methods': ['methods', 'methodology', 'materials and methods', 'experimental'],
+        'Results': ['results', 'findings', 'observations'],
+        'Discussion': ['discussion', 'interpretation'],
+        'Conclusions': ['conclusions', 'concluding remarks'],
+        'References': ['references', 'bibliography', 'works cited'],
+        'Other': ['other']
+    }
+    
+    def __init__(self, custom_sections: Dict[str, List[str]] = None):
+        self.sections = self.DEFAULT_SECTIONS.copy()
+        if custom_sections:
+            self.sections.update(custom_sections)
+    
+    def normalize_section_type(self, heading: str) -> str:
+        """Match heading to canonical section type"""
+        heading_lower = heading.lower().strip()
+        for canonical, variants in self.sections.items():
+            if heading_lower in [v.lower() for v in variants]:
+                return canonical
+        return 'Other'
+    
+    def get_main_sections(self) -> List[str]:
+        """Get list of main section types (excluding 'Other')"""
+        return [s for s in self.sections.keys() if s != 'Other']
+
 class SingleContextSectionIdentifier:
     """Identifies academic paper sections using LLM in two passes:
     1. Identify document structure (headings and their levels)
     2. Extract main sections with their boundary strings
     """
     
-    def __init__(self, lm: Union[LMConfig, dspy.LM] = None):
+    def __init__(self, lm: Union[LMConfig, dspy.LM] = None, 
+                 custom_sections: Dict[str, List[str]] = None):
         self.lm = get_lm_for_task("section_identification") if lm is None else lm
+        self.section_types = SectionTypes(custom_sections)
         self.structure_predictor = dspy.ChainOfThought(DocumentStructure)
         self.boundary_predictor = dspy.ChainOfThought(ExtractSectionBoundaries)
     
@@ -106,7 +140,7 @@ class SingleContextSectionIdentifier:
                     For each heading, output a JSON object with:
                     - level: number of # characters
                     - text: the heading text
-                    - section_type: classify as one of [Abstract, Introduction, Methods, Results, Discussion, Conclusions, References, Other]
+                    - section_type: classify as one of {self.section_types.get_main_sections() + ['Other']}
                     
                     Focus on identifying main sections. Subsections should be classified as "Other".
                     
@@ -166,8 +200,7 @@ class SingleContextSectionIdentifier:
             headings = self._identify_document_structure(text)
             
             # Filter for main section headings and sort by line number
-            main_sections = ['Abstract', 'Introduction', 'Methods', 'Results', 'Discussion', 
-                           'Conclusions', 'References']
+            main_sections = self.section_types.get_main_sections()
             main_headings = [h for h in headings 
                            if h['section_type'] in main_sections]
             main_headings.sort(key=lambda x: x['line_number'])
