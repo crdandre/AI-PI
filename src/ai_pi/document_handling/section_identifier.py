@@ -226,7 +226,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     # Use specific file path
-    paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")  
+    paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")
     with open(paper_path, 'r', encoding='utf-8') as f:
         paper_text = f.read()
         
@@ -241,9 +241,11 @@ if __name__ == "__main__":
         openrouter_model,
         api_base="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.9,
+        temperature=0.01,
     )
+
     identifier = SingleContextSectionIdentifier(lm=lm)
+
     sections = identifier.process_document(text=paper_text)
         
     # Print results with proper encoding
