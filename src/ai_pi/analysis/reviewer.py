@@ -19,24 +19,6 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ReviewItem(dspy.Signature):
-    """Individual review item structure"""
-    match_text = dspy.OutputField(desc="Exact text to match")
-    comment = dspy.OutputField(desc="Review comment")
-    revision = dspy.OutputField(desc="Complete revised text")
-
-class ReviewerSignature(dspy.Signature):
-    """Generate high-level scientific review feedback for a section of text."""
-    section_text = dspy.InputField(desc="The text content of the section to review")
-    section_type = dspy.InputField(desc="The type of section (e.g., Methods, Results)")
-    context = dspy.InputField(desc="Additional context about the paper")
-    initial_analysis = dspy.OutputField(desc="Initial high-level analysis of scientific concerns")
-    reflection = dspy.OutputField(desc="Self-reflection on whether feedback addresses core scientific issues")
-    review_items = dspy.OutputField(desc="List of review items in JSON format", format=list[ReviewItem])
-    cross_references = dspy.OutputField(desc="Connections to other sections and related work")
-    knowledge_gaps = dspy.OutputField(desc="Identification of remaining knowledge gaps")
-
-
 @dataclass
 class ScoringMetrics:
     """Standardized scoring metrics for paper evaluation"""
@@ -60,6 +42,52 @@ class SectionAnalysis:
     dependencies: List[str]
     supports: List[str]
     metrics: ScoringMetrics
+
+class ReviewItem(dspy.Signature):
+    """Individual review item structure"""
+    match_text = dspy.OutputField(desc="Exact text to match")
+    comment = dspy.OutputField(desc="Review comment")
+    revision = dspy.OutputField(desc="Complete revised text")
+
+class ReviewerSignature(dspy.Signature):
+    """Generate high-level scientific review feedback for a section of a scientific paper.
+    
+    Apply careful stepwise thinking to each piece of this task:
+    
+    You are a senior academic reviewer with expertise in providing strategic,
+    high-level manuscript feedback.
+    
+    First, consider the section type and its expected scope. Each section has specific
+    requirements and constraints. Those will be given in specific scopes.
+    
+    For review items, here's an example of the desired output, to be outputted in JSON format (able to be parsed as json):
+    
+    review_items: [
+        {
+            "match_text": "The model predicted curve progression with an average error of 5 degrees.",
+            "comment": "The results require statistical validation (e.g., confidence intervals) and 
+                discussion of clinical significance. How does this error rate impact treatment decisions?",
+            "revision": "The model predicted curve progression with an average error of 5° (95% CI: 3.2-6.8°). 
+                This accuracy level is clinically significant as it falls within the threshold needed for 
+                reliable treatment planning (< 7°), based on established clinical guidelines."
+        }
+    ]
+        
+    """
+    section_text = dspy.InputField(desc="The text content of the section being reviewed")
+    section_type = dspy.InputField(desc="The type of section (e.g., Abstract, Introduction, Methods, etc.)")
+    context = dspy.InputField(desc="Additional context about the paper")
+    
+    metrics = dspy.OutputField(desc="JSON metrics assessing the section's clarity and methodology")
+    initial_analysis = dspy.OutputField(desc="Initial analysis of the section's content")
+    reflection = dspy.OutputField(desc="Reflection on the feedback provided")
+    review_items = dspy.OutputField(
+        desc="List of review items in JSON format",
+        format=list[ReviewItem]
+    )
+    cross_references = dspy.OutputField(desc="Connections to other sections and related work")
+    knowledge_gaps = dspy.OutputField(desc="Identification of remaining knowledge gaps")
+
 
 class ComponentOperationSignature(dspy.Signature):
     """Generic signature for component operations (extract/analyze/generate)"""
@@ -250,23 +278,71 @@ class Reviewer(dspy.Module):
             
             # Calculate metrics with context
             metrics = self.metrics_scorer(
-                content=section['text'],  # Direct access since we know it exists
+                content=section['text'],
                 context=section_context,
                 criteria=section_criteria
             ).metrics
             
-            # Generate analysis with context
-            analysis = self.component_operator(
-                content=section['text'],  # Direct access since we know it exists
-                context=section_context,
-                operation_type='analyze',
-                target=f"Review the {section['section_type']} section"
-            ).result
-            
-            return {
-                'metrics': metrics,
-                'review': analysis
-            }
+            # Generate review items with context
+            try:
+                # Log the input we're sending to the LLM
+                logger.info(f"\n{'='*50}\nReviewing {section['section_type']} section")
+                logger.info(f"Input text (first 200 chars): {section['text'][:200]}...")
+                
+                result = self.reviewer(
+                    section_text=section['text'],
+                    section_type=section['section_type'],
+                    context=paper_context.get('paper_summary', '')
+                )
+                
+                # Add logging for review_items output
+                logger.info(f"Raw review_items output: {result.review_items}")
+                
+                # Parse review items if they're returned as a string
+                review_items = []
+                if isinstance(result.review_items, str):
+                    try:
+                        # Clean up the string if it contains markdown code block formatting
+                        clean_json_str = result.review_items
+                        if clean_json_str.startswith('```'):
+                            # Remove markdown code block formatting
+                            clean_json_str = clean_json_str.split('\n', 1)[1]  # Remove first line with ```json
+                            clean_json_str = clean_json_str.rsplit('\n', 1)[0]  # Remove last line with ```
+                        
+                        logger.info(f"Cleaned review items string: {clean_json_str}")
+                        
+                        # Parse JSON string into list of dictionaries
+                        parsed_items = json.loads(clean_json_str)
+                        
+                        logger.info(f"Parsed review items: {review_items}")
+                        
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse review items JSON: {e}")
+                        review_items = []
+                else:
+                    review_items = result.review_items
+
+                # Filter review items based on section-specific criteria
+                filtered_items = self._validate_section_specific_feedback(
+                    review_items, 
+                    section['section_type'].lower()
+                )
+                
+                return {
+                    'metrics': metrics,
+                    'initial_analysis': result.initial_analysis,
+                    'reflection': result.reflection,
+                    'review_items': filtered_items if filtered_items != [] else "no review_items passed!"
+                }
+                
+            except Exception as e:
+                logger.error(f"Error in review generation: {str(e)}")
+                return {
+                    'metrics': metrics,
+                    'initial_analysis': '',
+                    'reflection': '',
+                    'review_items': []
+                }
 
 
     def _generate_main_review(self) -> dict:
@@ -312,14 +388,17 @@ class Reviewer(dspy.Module):
         """Filter review items based on section-specific criteria."""
         if section_type not in self.section_criteria:
             logger.warning(f"Unknown section type: {section_type}")
-            return review_items
+            return []
         
         criteria = self.section_criteria[section_type]
         filtered_items = []
         
         for item in review_items:
-            comment = item.get('comment', '').lower()
-            revision = item.get('revision', '').lower()
+            if not isinstance(item, ReviewItem):
+                continue
+            
+            comment = item.comment.lower() if item.comment else ''
+            revision = item.revision.lower() if item.revision else ''
             
             # Check if comment contains any terms to avoid
             should_avoid = any(avoid_term in comment or avoid_term in revision 
@@ -331,8 +410,6 @@ class Reviewer(dspy.Module):
             
             if has_focus and not should_avoid:
                 filtered_items.append(item)
-            else:
-                logger.debug(f"Filtered out review item for {section_type}: {item}")
         
         return filtered_items
 
@@ -349,7 +426,7 @@ class Reviewer(dspy.Module):
         
         # Analyze each review item against quality criteria
         for item in review_items:
-            comment = item.get('comment', '').lower()
+            comment = item.comment.lower() if item.comment else ''
             
             # Check depth
             depth_score = sum(1 for term in self.review_quality_criteria['depth'] 
@@ -397,4 +474,4 @@ if __name__ == "__main__":
     reviewed_document = reviewer.review_document(document)
     
     # Print results
-    print(json.dumps(reviewed_document, indent=4))
+    print(json.dumps(reviewed_document["reviews"]["section_reviews"], indent=4))
