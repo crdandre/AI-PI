@@ -262,22 +262,8 @@ if __name__ == "__main__":
     paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")
     with open(paper_path, 'r', encoding='utf-8') as f:
         paper_text = f.read()
-        
-    # openrouter_model = 'openrouter/google/gemini-2.0-flash-exp:free'
-    # openrouter_model = 'openrouter/google/learnlm-1.5-pro-experimental:free'
-    # openrouter_model = 'openrouter/anthropic/claude-3.5-haiku'
-    # openrouter_model = 'openrouter/deepseek/deepseek-chat'
-    openrouter_model = 'openrouter/openai/gpt-4o'
-    
-    # Initialize and run
-    lm = dspy.LM(
-        openrouter_model,
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.01,
-    )
 
-    identifier = SingleContextSectionIdentifier(lm=lm)
+    identifier = SingleContextSectionIdentifier()
 
     sections = identifier.process_document(text=paper_text)
         

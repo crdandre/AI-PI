@@ -30,10 +30,11 @@ OPENROUTER_4O_MINI = LMConfig("openrouter/openai/gpt-4o-mini")
 OPENROUTER_SONNET = LMConfig("openrouter/anthropic/claude-3.5-sonnet:beta")
 OPENROUTER_DEEPSEEK_V3 = LMConfig("openrouter/deepseek/deepseek-chat")
 OPENROUTER_GEMINI_PRO = LMConfig("openrouter/google/learnlm-1.5-pro-experimental:free")
+OLLAMA_QWQ = LMConfig("ollama_chat/qwq:latest")
 
 DEFAULT_CONFIGS = {
     "summarization":OPENROUTER_4O,
-    "review": OPENROUTER_4O_MINI,
+    "review": OPENROUTER_DEEPSEEK_V3,
     "image_caption_extraction": OPENROUTER_4O,
     "caption_analysis": OPENROUTER_4O,
     "caption_combination": OPENROUTER_4O,
