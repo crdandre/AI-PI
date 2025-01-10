@@ -13,7 +13,7 @@ import json
 import logging
 from ..lm_config import get_lm_for_task, LMConfig
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List
 import os
 
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +45,7 @@ class SectionAnalysis:
 
 class ReviewItem(dspy.Signature):
     """Individual review item structure"""
-    match_text = dspy.OutputField(desc="Exact text to match")
+    match_string = dspy.OutputField(desc="Exact text to match")
     comment = dspy.OutputField(desc="Review comment")
     revision = dspy.OutputField(desc="Complete revised text")
 
@@ -64,7 +64,7 @@ class ReviewerSignature(dspy.Signature):
     
     review_items: [
         {
-            "match_text": "The model predicted curve progression with an average error of 5 degrees.",
+            "match_string": "The model predicted curve progression with an average error of 5 degrees.",
             "comment": "The results require statistical validation (e.g., confidence intervals) and 
                 discussion of clinical significance. How does this error rate impact treatment decisions?",
             "revision": "The model predicted curve progression with an average error of 5° (95% CI: 3.2-6.8°). 
@@ -147,7 +147,8 @@ class Reviewer(dspy.Module):
     
     def __init__(self, 
                  lm: LMConfig = None,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 validate_reviews: bool = True):
         super().__init__()
         
         # Get LM for review task using existing configuration
@@ -176,6 +177,7 @@ class Reviewer(dspy.Module):
             print(f"Reviewer type: {type(self.reviewer).__name__}")
 
         self.verbose = verbose
+        self.validate_reviews = validate_reviews
 
 
     def review_document(self, document_json: dict) -> dict:
@@ -211,12 +213,21 @@ class Reviewer(dspy.Module):
             else:
                 metrics_dict = metrics
 
-            # 4. Compile final document with single metrics output
+            # Flatten review items for easier consumption
+            all_review_items = []
+            for section_review in section_reviews:
+                if isinstance(section_review['review']['review_items'], list):
+                    all_review_items.extend(section_review['review']['review_items'])
+
+            # Structure the output according to review_struct.json
             document_json['reviews'] = {
                 'main_review': main_review,
                 'section_reviews': section_reviews,
                 'metrics': metrics_dict
             }
+            
+            # Store the flattened review items in a separate key for convenience
+            document_json['review_items'] = all_review_items
             
             return document_json
             
@@ -313,26 +324,28 @@ class Reviewer(dspy.Module):
                         
                         # Parse JSON string into list of dictionaries
                         parsed_items = json.loads(clean_json_str)
+                        review_items = parsed_items  # Add this line to assign parsed items
                         
-                        logger.info(f"Parsed review items: {review_items}")
+                        logger.info(f"Parsed review items: {review_items}")  # Update log message
                         
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse review items JSON: {e}")
                         review_items = []
                 else:
-                    review_items = result.review_items
+                    review_items = result.review_items if isinstance(result.review_items, list) else []  # Ensure it's a list
 
-                # Filter review items based on section-specific criteria
-                filtered_items = self._validate_section_specific_feedback(
-                    review_items, 
-                    section['section_type'].lower()
+                # Filter review items based on section-specific criteria (now conditional)
+                filtered_items = (
+                    self._validate_section_specific_feedback(review_items, section['section_type'].lower())
+                    if self.validate_reviews
+                    else review_items
                 )
                 
                 return {
                     'metrics': metrics,
                     'initial_analysis': result.initial_analysis,
                     'reflection': result.reflection,
-                    'review_items': filtered_items if filtered_items != [] else "no review_items passed!"
+                    'review_items': filtered_items
                 }
                 
             except Exception as e:
@@ -473,5 +486,7 @@ if __name__ == "__main__":
     # Review entire document
     reviewed_document = reviewer.review_document(document)
     
-    # Print results
-    print(json.dumps(reviewed_document["reviews"]["section_reviews"], indent=4))
+    # Write results to file
+    os.makedirs("ref", exist_ok=True)
+    with open("ref/sample_output2.json", "w") as f:
+        json.dump(reviewed_document, f, indent=4)

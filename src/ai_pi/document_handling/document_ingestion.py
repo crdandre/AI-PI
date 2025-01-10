@@ -43,8 +43,8 @@ class Comment(TypedDict):
     text: str
     author: str
     date: str
-    position: Dict[str, int]
-    referenced_text: str
+    original_text: str  # The exact text that was commented
+    match_string: str   # Expanded context for matching
     resolved: bool
     replies: List['Comment']
     related_revision_id: Optional[str]
@@ -172,6 +172,14 @@ def extract_section_text(full_text: str, start_match: str, end_match: str, secti
         return ""
 
 
+def get_comment_context(text: str, start_pos: int, end_pos: int, context_chars: int = 100) -> str:
+    """Get surrounding context for a comment, up to context_chars in each direction."""
+    text_len = len(text)
+    context_start = max(0, start_pos - context_chars)
+    context_end = min(text_len, end_pos + context_chars)
+    return text[context_start:context_end]
+
+
 def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
     
@@ -242,25 +250,60 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             'revisions': []
         }
 
-        # Find all comment reference marks and their positions
-        comment_positions = {}
-        position_counter = 0
+        # Find all comment reference marks and their referenced text
+        comment_references = {}
+        current_comment_id = None
+        current_text = []
+        context_window = 200  # Increased from 50 to 200 characters
         
         for element in tree.iter():
-            # Track text content for position counting
-            if element.tag == f'{{{namespace["w"]}}}t':
-                position_counter += len(element.text if element.text else '')
+            if element.tag == f'{{{namespace["w"]}}}commentRangeStart':
+                current_comment_id = element.get(f'{{{namespace["w"]}}}id')
+                current_text = []
             
-            # Find comment start and end markers
-            elif element.tag == f'{{{namespace["w"]}}}commentRangeStart':
-                comment_id = element.get(f'{{{namespace["w"]}}}id')
-                if comment_id not in comment_positions:
-                    comment_positions[comment_id] = {'start': position_counter}
+            elif element.tag == f'{{{namespace["w"]}}}t' and current_comment_id:
+                # Get surrounding text nodes for context
+                prev_text = []
+                next_text = []
+                
+                # Look for previous siblings
+                current = element
+                while current is not None and len(''.join(prev_text)) < context_window:
+                    if current.getprevious() is not None:
+                        current = current.getprevious()
+                    elif current.getparent() is not None:
+                        current = current.getparent()
+                    else:
+                        break
+                    if current.tag == f'{{{namespace["w"]}}}t':
+                        prev_text.insert(0, current.text if current.text else '')
+                
+                # Look for next siblings
+                current = element
+                while current is not None and len(''.join(next_text)) < context_window:
+                    if current.getnext() is not None:
+                        current = current.getnext()
+                    elif current.getparent() is not None:
+                        current = current.getparent().getnext()
+                    else:
+                        break
+                    if current is not None and current.tag == f'{{{namespace["w"]}}}t':
+                        next_text.append(current.text if current.text else '')
+                
+                # Combine context with current text
+                full_context = (
+                    ''.join(prev_text).strip() + 
+                    ' ' + (element.text if element.text else '').strip() + 
+                    ' ' + ''.join(next_text).strip()
+                ).strip()
+                current_text.append(full_context)
             
             elif element.tag == f'{{{namespace["w"]}}}commentRangeEnd':
                 comment_id = element.get(f'{{{namespace["w"]}}}id')
-                if comment_id in comment_positions:
-                    comment_positions[comment_id]['end'] = position_counter
+                if comment_id == current_comment_id:
+                    comment_references[comment_id] = ' '.join(current_text).strip()
+                    current_comment_id = None
+                    current_text = []
 
         # Reset position counter for revisions
         position_counter = 0
@@ -315,27 +358,27 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             
             comment_counter = 0
             for comment in comments_tree.findall('.//w:comment', namespace):
-                original_id = comment.get('{%s}id' % namespace['w'])
-                new_id = str(comment_counter)
+                original_id = comment.get(f'{{{namespace["w"]}}}id')
+                original_text = comment_references.get(original_id, '')
                 
-                position = comment_positions.get(original_id, {'start': 0, 'end': 0})
-                
-                start = position['start']
-                end = position['end']
-                expanded_start, expanded_end = get_expanded_range(start, end, full_text)
+                # Find position of original text in full document
+                text_pos = full_text.find(original_text)
+                if text_pos != -1:
+                    expanded_context = get_comment_context(
+                        full_text, 
+                        text_pos, 
+                        text_pos + len(original_text)
+                    )
+                else:
+                    expanded_context = original_text
                 
                 comment_data = {
-                    'id': new_id,
+                    'id': str(comment_counter),
                     'text': ''.join(comment.itertext()),
                     'author': comment.get('{%s}author' % namespace['w']),
                     'date': comment.get('{%s}date' % namespace['w']),
-                    'position': {
-                        'start': start,
-                        'end': end,
-                        'expanded_start': expanded_start,
-                        'expanded_end': expanded_end
-                    },
-                    'referenced_text': full_text[expanded_start:expanded_end],
+                    'original_text': original_text,
+                    'match_string': expanded_context,
                     'resolved': comment.get('{%s}resolved' % namespace['w']) == 'true',
                     'replies': [],
                     'related_revision_id': None

@@ -17,9 +17,9 @@ class PaperReview:
         # Initialize components with task-specific LMs
         self.summarizer = Summarizer(verbose=verbose)  # Will use summarization LM config
         self.section_reviewer = Reviewer(
-            reviewer_class=reviewer_class,
-            verbose=verbose
-        )  # Will use review LM config
+            verbose=verbose,
+            validate_reviews=False
+        )  # Reviewer only accepts verbose and optional lm parameters
         
         self.verbose = verbose
         
@@ -101,8 +101,9 @@ class PaperReview:
             self.logger.info(f"Generating reviewed document at: {output_path}")
             output_commented_document(
                 input_doc_path=input_doc_path,
-                document_review_items=reviewed_document['reviews'],
-                output_doc_path=output_path
+                review_struct=reviewed_document,
+                output_doc_path=output_path,
+                match_threshold=90
             )
             self.logger.debug("Document generation complete")
             

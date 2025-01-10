@@ -121,6 +121,9 @@ class PDFTextExtractor:
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
 
+        env = os.environ.copy()
+        env["TORCH_DEVICE"] = "cuda:0"
+        
         command = [
             "marker_single",
             input_pdf_path,
@@ -133,7 +136,13 @@ class PDFTextExtractor:
 
         try:
             logging.info(f"Running command: {' '.join(command)}")
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env
+            )
             logging.info(f"Marker extraction completed for {input_pdf_path}")
             logging.info(f"Marker output: {result.stdout}")
             
