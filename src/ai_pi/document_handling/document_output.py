@@ -25,6 +25,22 @@ def add_high_level_review(doc, high_level_review):
     # Add title
     doc.add_heading('Scientific Review Summary', level=1)
     
+    # Add metrics section if available
+    if 'metrics' in high_level_review:
+        doc.add_heading('Review Metrics', level=2)
+        metrics = high_level_review['metrics']
+        if isinstance(metrics, str):
+            doc.add_paragraph(metrics)
+        elif isinstance(metrics, dict):
+            # Handle structured metrics
+            for category, scores in metrics.items():
+                doc.add_paragraph(f"{category.title()}:", style='Heading 3')
+                if isinstance(scores, dict):
+                    for subcategory, score in scores.items():
+                        doc.add_paragraph(f"- {subcategory.title()}: {score}", style='List Bullet')
+                else:
+                    doc.add_paragraph(f"Score: {scores}")
+    
     # Add overall assessment
     doc.add_heading('Overall Assessment', level=2)
     doc.add_paragraph(high_level_review.get('overall_assessment', 'No overall assessment provided.'))
@@ -95,16 +111,19 @@ def output_commented_document(input_doc_path, review_struct, output_doc_path, ma
     doc.save(output_doc_path)
     doc = docx.Document(output_doc_path)
     
-    # Add high-level review at the beginning
-    if 'reviews' in review_struct and 'main_review' in review_struct['reviews']:
+    # Update how we extract the high-level review
+    if 'reviews' in review_struct:
         high_level_review = {
-            'overall_assessment': review_struct['reviews']['main_review']['overall_assessment'],
-            'key_strengths': review_struct['reviews']['main_review']['key_strengths'].split('\n') if isinstance(review_struct['reviews']['main_review']['key_strengths'], str) else [],
-            'key_weaknesses': review_struct['reviews']['main_review']['key_weaknesses'].split('\n') if isinstance(review_struct['reviews']['main_review']['key_weaknesses'], str) else [],
-            'recommendations': review_struct['reviews']['main_review']['global_suggestions'].split('\n') if isinstance(review_struct['reviews']['main_review']['global_suggestions'], str) else []
+            'metrics': review_struct['reviews'].get('metrics', 'No metrics provided.'),  # Get metrics directly from review_struct
+            'overall_assessment': review_struct['reviews'].get('main_review', {}).get('overall_assessment', ''),
+            'key_strengths': review_struct['reviews'].get('main_review', {}).get('key_strengths', '').split('\n') 
+                if isinstance(review_struct['reviews'].get('main_review', {}).get('key_strengths'), str) else [],
+            'key_weaknesses': review_struct['reviews'].get('main_review', {}).get('key_weaknesses', '').split('\n')
+                if isinstance(review_struct['reviews'].get('main_review', {}).get('key_weaknesses'), str) else [],
+            'recommendations': review_struct['reviews'].get('main_review', {}).get('global_suggestions', '').split('\n')
+                if isinstance(review_struct['reviews'].get('main_review', {}).get('global_suggestions'), str) else []
         }
         
-        # Insert high-level review at the beginning while preserving document structure
         # Create a new document for the review section
         review_doc = docx.Document()
         add_high_level_review(review_doc, high_level_review)
@@ -243,7 +262,7 @@ if __name__ == "__main__":
     # Load sample review data from JSON
     import json
     
-    with open("ref/sample_output2.json", "r") as f:
+    with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250111_070448/ScolioticFEPaper_v7_reviewed.json", "r") as f:
         review_data = json.load(f)
     
     # Test paths - adjust these to your actual file locations

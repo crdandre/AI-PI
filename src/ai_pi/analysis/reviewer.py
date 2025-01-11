@@ -102,8 +102,18 @@ class ReviewMetricsSignature(dspy.Signature):
     criteria = dspy.InputField(desc="Scoring criteria dictionary")
     metrics = dspy.OutputField(desc="Detailed metrics scores", format=ScoringMetrics)
 
+class MetricEvaluationSignature(dspy.Signature):
+    """Signature for evaluating a single metric factor"""
+    content = dspy.InputField(desc="Content to evaluate")
+    factor = dspy.InputField(desc="Factor being evaluated")
+    score = dspy.OutputField(desc="Numerical score between 1-5", format=float)
+
 class ReviewMetrics(dspy.Module):
     """Module for scoring paper sections based on defined criteria"""
+    def __init__(self):
+        super().__init__()
+        self.evaluator = dspy.Predict(MetricEvaluationSignature)
+
     def forward(self, content, criteria):
         """Evaluate content against each metric using defined factors and weights"""
         # Initialize scores
@@ -135,12 +145,16 @@ class ReviewMetrics(dspy.Module):
         total_score = 0.0
         
         for factor, weight in zip(factors, weights):
-            # Use LM to evaluate each factor on a scale of 1-5
-            factor_prompt = f"Evaluate the following text on {factor} on a scale of 1-5:\n{content}"
-            factor_score = float(self.lm(factor_prompt))  # This will use the configured LM
-            total_score += factor_score * weight
+            try:
+                result = self.evaluator(content=content, factor=factor)
+                factor_score = max(1.0, min(5.0, result.score))  # Clamp between 1-5
+                total_score += factor_score * weight
+            except Exception as e:
+                logger.error(f"Failed to evaluate factor {factor}: {e}")
+                factor_score = 3.0  # Default to middle score on error
+                total_score += factor_score * weight
             
-        return min(5.0, max(0.0, total_score))  # Ensure score is between 0-5
+        return min(5.0, max(0.0, total_score))
 
 class Reviewer(dspy.Module):
     """Reviews individual sections with awareness of full paper context"""
@@ -206,7 +220,7 @@ class Reviewer(dspy.Module):
                     'review': review
                 })
             
-            # Get metrics as dictionary
+            # Get overall metrics as dictionary
             metrics = self.paper_knowledge.get('metrics', ScoringMetrics(0,0,0,0,0,0))
             if isinstance(metrics, ScoringMetrics):
                 metrics_dict = metrics.to_dict()
@@ -219,11 +233,11 @@ class Reviewer(dspy.Module):
                 if isinstance(section_review['review']['review_items'], list):
                     all_review_items.extend(section_review['review']['review_items'])
 
-            # Structure the output according to review_struct.json
+            # Structure the output with both overall and section-specific metrics
             document_json['reviews'] = {
                 'main_review': main_review,
-                'section_reviews': section_reviews,
-                'metrics': metrics_dict
+                'section_reviews': section_reviews,  # Each section review contains its own metrics
+                'metrics': metrics_dict  # Overall document metrics
             }
             
             # Store the flattened review items in a separate key for convenience
@@ -249,6 +263,7 @@ class Reviewer(dspy.Module):
                 'full_text': '\n'.join(section['text'] for section in document_json['sections'])
             }
             
+            # Overall document metrics
             metrics_result = self.metrics_scorer(
                 content=components['full_text'],
                 criteria=self.scoring_criteria
