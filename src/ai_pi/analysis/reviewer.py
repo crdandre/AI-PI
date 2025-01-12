@@ -55,10 +55,9 @@ class ReviewerSignature(dspy.Signature):
     Apply careful stepwise thinking to each piece of this task:
     
     You are a senior academic reviewer with expertise in providing strategic,
-    high-level manuscript feedback.
+    analytic manuscript feedback.
     
-    First, consider the section type and its expected scope. Each section has specific
-    requirements and constraints. Those will be given in specific scopes.
+    First, consider the section type and its expected scope and audience (researchers in this field, so technical jargon is OK). Each section has specific requirements and constraints. Those will be given in specific scopes.
     
     For review items, here's an example of the desired output, to be outputted in JSON format (able to be parsed as json):
     
@@ -123,8 +122,8 @@ class ReviewMetrics(dspy.Module):
         presentation = self._evaluate_metric(content, criteria['presentation'])
         literature = self._evaluate_metric(content, criteria['literature_integration'])
         
-        # Assess novelty based on impact criteria
-        novelty = impact * 0.8  # Slightly reduce impact score for novelty
+        #TODO: Can implement this based on literature context from scraped sources
+        novelty = impact
         
         return self.metrics(ScoringMetrics(
             clarity=clarity,
@@ -286,91 +285,92 @@ class Reviewer(dspy.Module):
             return {}
 
 
-    def _review_section(self, section: dict, paper_context: dict = None, custom_criteria: dict = None) -> dict:
-        """Reviews section using DSPy predictors with paper-wide context"""
+    def _review_section(self, section: dict, paper_context: dict = None) -> dict:
+        """Reviews section using DSPy predictors with comprehensive paper-wide context"""
+        
+        # Build comprehensive section context
+        section_context = {
+            # Current section info
+            'section_type': section['section_type'],
+            'section_text': section['text'],
+            
+            # Direct context from paper knowledge
+            'research_problem': paper_context.get('research_problem', ''),
+            'main_findings': paper_context.get('main_findings', ''),
+            'limitations': paper_context.get('limitations', ''),
+            'key_methods': paper_context.get('key_methods', ''),
+            
+            # Relationship context
+            'cross_references': paper_context.get('cross_references', {}),
+            
+            # Section's place in document
+            'section_summary': next(
+                (s['summary'] for s in paper_context.get('section_summaries', [])
+                 if s['section_type'] == section['section_type']),
+                ''
+            ),
+            
+            # Adjacent sections context
+            'previous_section': self._get_adjacent_section(paper_context, section['section_type'], -1),
+            'next_section': self._get_adjacent_section(paper_context, section['section_type'], 1),
+            
+            # Document-level metrics for comparison
+            'document_metrics': paper_context.get('metrics', {})
+        }
+
         with dspy.context(lm=self.lm):
-            # Include relevant paper context in the review
-            section_context = {
-                'main_findings': paper_context.get('main_findings', ''),
-                'limitations': paper_context.get('limitations', ''),
-                'section_type': section['section_type']
-            }
+            # Enhanced reviewer prompt with richer context
+            result = self.reviewer(
+                section_text=section['text'],
+                section_type=section['section_type'],
+                context=section_context
+            )
             
-            # Use section-specific criteria if provided
-            section_criteria = custom_criteria or {
-                k: v for k, v in self.scoring_criteria.items()
-                if k in ['clarity', 'methodology']
-            }
-            
-            # Calculate metrics with context
+            # Calculate section-specific metrics with full context
             metrics = self.metrics_scorer(
                 content=section['text'],
                 context=section_context,
-                criteria=section_criteria
+                criteria=self._get_section_specific_criteria(section['section_type'])
             ).metrics
-            
-            # Generate review items with context
-            try:
-                # Log the input we're sending to the LLM
-                logger.info(f"\n{'='*50}\nReviewing {section['section_type']} section")
-                logger.info(f"Input text (first 200 chars): {section['text'][:200]}...")
-                
-                result = self.reviewer(
-                    section_text=section['text'],
-                    section_type=section['section_type'],
-                    context=paper_context.get('paper_summary', '')
-                )
-                
-                # Add logging for review_items output
-                logger.info(f"Raw review_items output: {result.review_items}")
-                
-                # Parse review items if they're returned as a string
-                review_items = []
-                if isinstance(result.review_items, str):
-                    try:
-                        # Clean up the string if it contains markdown code block formatting
-                        clean_json_str = result.review_items
-                        if clean_json_str.startswith('```'):
-                            # Remove markdown code block formatting
-                            clean_json_str = clean_json_str.split('\n', 1)[1]  # Remove first line with ```json
-                            clean_json_str = clean_json_str.rsplit('\n', 1)[0]  # Remove last line with ```
-                        
-                        logger.info(f"Cleaned review items string: {clean_json_str}")
-                        
-                        # Parse JSON string into list of dictionaries
-                        parsed_items = json.loads(clean_json_str)
-                        review_items = parsed_items  # Add this line to assign parsed items
-                        
-                        logger.info(f"Parsed review items: {review_items}")  # Update log message
-                        
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse review items JSON: {e}")
-                        review_items = []
-                else:
-                    review_items = result.review_items if isinstance(result.review_items, list) else []  # Ensure it's a list
 
-                # Filter review items based on section-specific criteria (now conditional)
-                filtered_items = (
-                    self._validate_section_specific_feedback(review_items, section['section_type'].lower())
-                    if self.validate_reviews
-                    else review_items
-                )
-                
+            return {
+                'metrics': metrics,
+                'initial_analysis': result.initial_analysis,
+                'reflection': result.reflection,
+                'review_items': self._validate_section_specific_feedback(
+                    result.review_items,
+                    section['section_type']
+                ),
+                'cross_references': result.cross_references,
+                'knowledge_gaps': result.knowledge_gaps
+            }
+
+    def _get_adjacent_section(self, paper_context: dict, current_section: str, offset: int) -> dict:
+        """Helper to get previous/next section context"""
+        sections = paper_context.get('sections', [])
+        try:
+            current_idx = next(i for i, s in enumerate(sections) 
+                             if s['section_type'] == current_section)
+            adjacent_idx = current_idx + offset
+            if 0 <= adjacent_idx < len(sections):
                 return {
-                    'metrics': metrics,
-                    'initial_analysis': result.initial_analysis,
-                    'reflection': result.reflection,
-                    'review_items': filtered_items
+                    'type': sections[adjacent_idx]['section_type'],
+                    'summary': next(
+                        (s['summary'] for s in paper_context.get('section_summaries', [])
+                         if s['section_type'] == sections[adjacent_idx]['section_type']),
+                        ''
+                    )
                 }
-                
-            except Exception as e:
-                logger.error(f"Error in review generation: {str(e)}")
-                return {
-                    'metrics': metrics,
-                    'initial_analysis': '',
-                    'reflection': '',
-                    'review_items': []
-                }
+        except StopIteration:
+            pass
+        return {}
+
+    def _get_section_specific_criteria(self, section_type: str) -> dict:
+        """Get section-specific review criteria"""
+        base_criteria = self.scoring_criteria.copy()
+        if section_type in self.section_criteria:
+            base_criteria.update(self.section_criteria[section_type])
+        return base_criteria
 
 
     def _generate_main_review(self) -> dict:
