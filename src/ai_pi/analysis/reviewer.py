@@ -76,7 +76,7 @@ class SectionReviewerSignature(dspy.Signature):
 
 
 class FullDocumentReviewSignature(dspy.Signature):
-    """Generate high-level scientific review feedback for a section of a scientific paper.
+    """Generate high-level scientific review feedback for a scientific paper.
     
     Apply careful stepwise thinking to each piece of this task:
     

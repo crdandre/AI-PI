@@ -132,7 +132,7 @@ class PaperReview:
 
 if __name__ == "__main__":
     # Example usage with different configuration approaches
-    input_path = "examples/ScolioticFEPaper_v7.docx"
+    input_path = "examples/NormativeFEPaper_v7.docx"
     
     paper_review = PaperReview(verbose=True)
     
