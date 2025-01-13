@@ -117,9 +117,11 @@ class Reviewer(dspy.Module):
         self.paper_knowledge = None
 
 
-    def review_document(self, document_json: dict) -> dict:
+    def review_document(self, document_json: dict, topic_context: str) -> dict:
         try:
             logger.info("Starting document review...")
+            
+            self.topic_context = topic_context
             
             # 1. Build paper-wide understanding first
             logger.info("Building paper knowledge...")
@@ -208,7 +210,8 @@ class Reviewer(dspy.Module):
                 'cross_references': hierarchical_summary['relationship_summary']['relationship_analysis'],
                 'sections': document_json['sections'],
                 'section_summaries': hierarchical_summary['section_summaries'],
-                'full_text': '\n'.join(section['text'] for section in document_json['sections'])
+                'full_text': '\n'.join(section['text'] for section in document_json['sections']),
+                'topic_context': self.topic_context
             }
             
             # Use context manager for LM
@@ -217,7 +220,8 @@ class Reviewer(dspy.Module):
                     document_text=components['full_text'],
                     context={
                         'research_problem': components['research_problem'],
-                        'sections': components['sections']
+                        'sections': components['sections'],
+                        'topic_context': self.topic_context
                     },
                     criteria=self.scoring_criteria
                 )
@@ -415,9 +419,15 @@ if __name__ == "__main__":
     # Load and process sample document
     with open("examples/example.json", "r") as f:
         document = json.load(f)
+
+    with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250113_032648/The_latest_efforts_in_computational_modeling_of_scoliosis_using_finite_element_modeling_-_both_with_and_without_surgical_inte/storm_gen_article_polished.txt", "r") as f:
+        topic_context = f.read()
     
     # Review entire document
-    reviewed_document = reviewer.review_document(document)
+    reviewed_document = reviewer.review_document(
+        document_json=document,
+        topic_context=topic_context
+    )
     
     # Write results to file
     os.makedirs("ref", exist_ok=True)

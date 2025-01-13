@@ -64,20 +64,24 @@ class Summarizer:
             relationship_summary
         )
         
-        # 4. Create hierarchical summary structure
+        # 4. Extract topic from Abstract
+        document_topic = self._get_document_topic(document_summary['document_analysis'])
+        
+        # 5. Create hierarchical summary structure
         hierarchical_summary = {
+            'topic': document_topic,
             'document_summary': document_summary,
             'relationship_summary': relationship_summary,
             'section_summaries': section_summaries
         }
         
-        # 5. Add the hierarchical summary to the input document
+        # 6. Add the hierarchical summary to the input document
         document_json['hierarchical_summary'] = hierarchical_summary
         
         if self.verbose:
             print(f"Generated summary tree with {len(section_summaries)} sections")
             
-        return document_json
+        return topic, document_json
     
     def _summarize_sections(self, sections: List[Dict]) -> List[Dict]:
         """Create detailed summaries of pre-defined sections"""
@@ -146,6 +150,24 @@ class Summarizer:
                 'document_analysis': result.analysis
             }
 
+    def _get_document_topic(self, document_analysis: str) -> str:
+        """
+        Extract a concise topic description from the document analysis.
+        
+        Args:
+            document_analysis: String containing the comprehensive document analysis
+            
+        Returns:
+            str: A concise topic/title describing the document's main focus
+        """
+        with dspy.context(lm=self.lm):
+            topic_prompt = dspy.Predict(
+                "Extract a concise (10 words or less) topic that captures the main focus: {analysis}",
+                analysis=dspy.OutputField()
+            )
+            result = topic_prompt(analysis=document_analysis)
+            return result.analysis.strip()
+
 if __name__ == "__main__":
     import os
     from dotenv import load_dotenv
@@ -168,7 +190,7 @@ if __name__ == "__main__":
     context_agent = Summarizer(lm=lm, verbose=True)
     
     # Process document
-    analyzed_document = context_agent.analyze_sectioned_document(document_json)
+    topic, analyzed_document = context_agent.analyze_sectioned_document(document_json)
     
     # Print results
     print(json.dumps(analyzed_document, indent=4))

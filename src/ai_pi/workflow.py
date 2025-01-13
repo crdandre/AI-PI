@@ -5,6 +5,7 @@ from pathlib import Path
 import dspy
 import json
 
+from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer
 from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
@@ -83,11 +84,16 @@ class PaperReview:
             
             # 1. Use Summarizer to analyze document structure
             self.logger.info("Analyzing document structure...")
-            document_structure = self.summarizer.analyze_sectioned_document(document_history)
+            topic, document_structure = self.summarizer.analyze_sectioned_document(document_history)
             
-            # 2. Use Reviewer to handle section-by-section review and final compilation
+            # 2. Use STORM to create an informed and concise topic context
+            topic_context = StormContextGenerator(
+                output_dir=output_dir
+            ).generate_context(topic)
+
+            # 3. Use Reviewer to handle section-by-section review and final compilation
             self.logger.info("Starting document review...")
-            reviewed_document = self.section_reviewer.review_document(document_history)
+            reviewed_document = self.section_reviewer.review_document(document_history, topic_context)
             
             # Now write the complete reviewed document to JSON
             output_json = output_dir / f"{paper_title}_reviewed.json"
