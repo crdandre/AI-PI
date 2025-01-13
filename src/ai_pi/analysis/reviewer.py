@@ -6,7 +6,6 @@ Requirements:
 1. Review that leverages an understanding of the whole paper to provide location-aware feedback
 2. Modular assignment of metrics so that the desired qualities can be assessed and modified
     --> see review_criteria.json
-3. 
 """
 import dspy
 import json
@@ -14,9 +13,7 @@ import logging
 from ..lm_config import get_lm_for_task
 from dataclasses import dataclass
 import os
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from ai_pi.utils.logging import setup_logging
 
 @dataclass
 class ScoringMetrics:
@@ -48,41 +45,37 @@ class GenerateReviewItemsSignature(dspy.Signature):
         - match_string: The exact text from the paper that needs revision
         - comment: The review comment explaining what should be changed
         - revision: The suggested revised text
-        Example format:
+        - match_string: the section in which the item was found
+        Example format (MUST BE ADHERED TO! PLEASE I BEG OF YOU!):
         [
             {
                 "match_string": "exact text from paper",
                 "comment": "This sentence needs clarification",
-                "revision": "suggested revised text"
+                "revision": "suggested revised text",
+                "section_type": "Introduction (ex.)"
             },
             ...
         ]""",
-        format=str
+        format=ReviewItem
     )
 
 class SectionReviewerSignature(dspy.Signature):
-    """Generate high-level scientific review feedback"""
-    section_text = dspy.InputField()
-    section_type = dspy.InputField()
-    context = dspy.InputField()
-    metrics = dspy.OutputField()
-    initial_analysis = dspy.OutputField()
+    """Generate high-level scientific review feedback
+    
+    Evaluate and review each section based on the text itself,
+    the section type, the context surrounding the section and the
+    relevant metrics associated with it's evaluation.  
+    """
+    section_text = dspy.InputField(desc="Text for a particular paper section")
+    section_type = dspy.InputField(desc="the type of section, i.e. Methods")
+    context = dspy.InputField(desc="Prior context either from a web search summary or from this paper itself, or even from internal LLM knowledge")
+    metrics = dspy.OutputField(desc="Output metrics used to evaluate the section", format=ScoringMetrics)
+    section_analysis = dspy.OutputField()
     cross_references = dspy.OutputField()
     knowledge_gaps = dspy.OutputField()
 
 
 class FullDocumentReviewSignature(dspy.Signature):
-    """Generate comprehensive document-level review"""
-    document_text = dspy.InputField(desc="Full document text")
-    context = dspy.InputField(desc="Document-wide context and metrics")
-    criteria = dspy.InputField(desc="Scoring criteria dictionary")
-    metrics = dspy.OutputField(desc="Detailed metrics scores", format=ScoringMetrics)
-    overall_assessment = dspy.OutputField(desc="Complete paper assessment")
-    key_strengths = dspy.OutputField(desc="Major strengths of the paper")
-    key_weaknesses = dspy.OutputField(desc="Major weaknesses of the paper")
-    global_suggestions = dspy.OutputField(desc="High-level improvement suggestions")
-
-class Reviewer(dspy.Module):
     """Generate high-level scientific review feedback for a section of a scientific paper.
     
     Apply careful stepwise thinking to each piece of this task:
@@ -90,49 +83,70 @@ class Reviewer(dspy.Module):
     You are a senior academic reviewer with expertise in providing strategic,
     analytic manuscript feedback.
     
-    First, consider the section type and its expected scope and audience (researchers in this field, so technical jargon is OK). Each 
-    section has specific requirements and constraints. Those will be given in specific scopes.       
-    """
+    Tips:
+    - Look at the methods, are they the best way to address the hypothesis or research question?
+    - Look beyond only what is on the page - consider the role of this research in its field and speak to it's utility in this respect.
+    - Think about your scope as the entire research field not just this paper - the key is to make this paper contribute to the field the best it can.
     
-    def __init__(self, lm=None, verbose=False, validate_reviews=True):
+    Consider the section type and its expected scope and audience (researchers in this field, so technical jargon is OK). Each 
+    section has specific requirements and constraints. Those will be given in specific scopes.       
+    """    
+    document_text = dspy.InputField(desc="Full document text")
+    context = dspy.InputField(desc="Document-wide context and metrics")
+    criteria = dspy.InputField(desc="Scoring criteria dictionary")
+    metrics = dspy.OutputField(desc="Detailed metrics scores for top-level paper categories", format=ScoringMetrics)
+    overall_assessment = dspy.OutputField(desc="Complete paper assessment")
+    key_strengths = dspy.OutputField(desc="Major strengths of the paper")
+    key_weaknesses = dspy.OutputField(desc="Major weaknesses of the paper")
+    global_suggestions = dspy.OutputField(desc="High-level improvement suggestions")
+
+class Reviewer(dspy.Module):
+    """carry out overall and section-specific reviews, as well as create specific review items"""
+    def __init__(self, verbose=False, validate_reviews=True):
         super().__init__()
-        
-        self.document_review_lm = get_lm_for_task("document_review", lm)
-        self.section_review_lm = get_lm_for_task("section_review", lm)
-        
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        with open(os.path.join(current_dir, 'review_criteria.json')) as f:
-            criteria = json.load(f)
-            self.section_criteria = criteria['section_criteria']
-            self.review_quality_criteria = criteria['review_quality_criteria']
-            self.scoring_criteria = criteria['scoring_criteria']
-        
-        self.section_reviewer = dspy.Predict(SectionReviewerSignature)
-        self.document_reviewer = dspy.Predict(FullDocumentReviewSignature)
-        self.review_items_generator = dspy.Predict(GenerateReviewItemsSignature)
-        
+        self.logger = logging.getLogger('reviewer')
         self.verbose = verbose
         self.validate_reviews = validate_reviews
-        self.paper_knowledge = None
+        
+        # Load review criteria
+        try:
+            with open("config/review_criteria.json", "r") as f:
+                criteria_data = json.load(f)
+                self.scoring_criteria = criteria_data.get('scoring_criteria', {})
+                self.section_criteria = criteria_data.get('section_criteria', {})
+                self.review_quality_criteria = criteria_data.get('review_quality_criteria', {})
+        except Exception as e:
+            self.logger.error(f"Error loading review criteria: {e}")
+            self.scoring_criteria = {}
+            self.section_criteria = {}
+            self.review_quality_criteria = {}
+        
+        # Initialize LMs for different review tasks
+        self.document_review_lm = get_lm_for_task("document_review")
+        self.section_review_lm = get_lm_for_task("section_review")
+        
+        # Initialize predictors
+        self.document_reviewer = dspy.ChainOfThought(FullDocumentReviewSignature)
+        self.section_reviewer = dspy.ChainOfThought(SectionReviewerSignature)
+        self.review_items_generator = dspy.ChainOfThought(GenerateReviewItemsSignature)
 
 
     def review_document(self, document_json: dict, topic_context: str) -> dict:
         try:
-            logger.info("Starting document review...")
+            self.logger.info("Starting document review...")
             
             self.topic_context = topic_context
             
             # 1. Build paper-wide understanding first
-            logger.info("Building paper knowledge...")
+            self.logger.info("Building paper knowledge...")
             self.paper_knowledge = self._build_paper_knowledge(document_json)
             
             # 2. Generate main review
-            logger.info("Generating main review...")
+            self.logger.info("Generating main review...")
             main_review = self._generate_main_review()
             
             # 3. Review individual sections with full context
-            logger.info("Reviewing individual sections...")
+            self.logger.info("Reviewing individual sections...")
             section_reviews = []
             all_review_items = []  # Create consolidated list
             for section in [s for s in document_json.get('sections', []) if 'references' not in s.get('section_type', '').lower()]:
@@ -165,10 +179,10 @@ class Reviewer(dspy.Module):
                                 all_review_items.append(item)
                             
                     except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse review items JSON: {e}")
+                        self.logger.error(f"Failed to parse review items JSON: {e}")
                         continue
                     except Exception as e:
-                        logger.error(f"Error processing review items: {e}")
+                        self.logger.error(f"Error processing review items: {e}")
                         continue
 
                 section_reviews.append({
@@ -196,7 +210,7 @@ class Reviewer(dspy.Module):
             return document_json
             
         except Exception as e:
-            logger.error(f"Error reviewing document: {str(e)}", exc_info=True)
+            self.logger.error(f"Error reviewing document: {str(e)}", exc_info=True)
             raise
 
 
@@ -239,7 +253,7 @@ class Reviewer(dspy.Module):
             return components
                 
         except Exception as e:
-            logger.error(f"Error building paper knowledge: {str(e)}")
+            self.logger.error(f"Error building paper knowledge: {str(e)}")
             return {}
 
 
@@ -273,7 +287,7 @@ class Reviewer(dspy.Module):
                     
                     # Validate format
                     if not isinstance(review_items, list):
-                        logger.error("Review items must be a list")
+                        self.logger.error("Review items must be a list")
                         review_items = []
                     else:
                         # Filter out invalid items
@@ -286,14 +300,14 @@ class Reviewer(dspy.Module):
                     review_items = []
                     
             except Exception as e:
-                logger.error(f"Error parsing review items: {e}")
+                self.logger.error(f"Error parsing review items: {e}")
                 review_items = []
 
-            logger.debug(f"Generated {len(review_items)} valid review items")
+            self.logger.debug(f"Generated {len(review_items)} valid review items")
 
             return {
                 'metrics': result.metrics,
-                'initial_analysis': result.initial_analysis,
+                'section_analysis': result.section_analysis,
                 'review_items': review_items,
                 'cross_references': result.cross_references,
                 'knowledge_gaps': result.knowledge_gaps
@@ -412,7 +426,15 @@ if __name__ == "__main__":
     import os
     import json
     from dotenv import load_dotenv
+    from datetime import datetime
+    from pathlib import Path
     load_dotenv()
+    
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "reviewer")
     
     reviewer = Reviewer(verbose=True)
     
@@ -423,7 +445,7 @@ if __name__ == "__main__":
     with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250113_032648/The_latest_efforts_in_computational_modeling_of_scoliosis_using_finite_element_modeling_-_both_with_and_without_surgical_inte/storm_gen_article_polished.txt", "r") as f:
         topic_context = f.read()
     
-    # Review entire document
+    logger.info("Starting document review...")
     reviewed_document = reviewer.review_document(
         document_json=document,
         topic_context=topic_context
@@ -433,3 +455,4 @@ if __name__ == "__main__":
     os.makedirs("ref", exist_ok=True)
     with open("ref/sample_output2.json", "w") as f:
         json.dump(reviewed_document, f, indent=4)
+    logger.info("Review complete. Results written to ref/sample_output2.json")

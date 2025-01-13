@@ -1,14 +1,13 @@
-from typing import List, Dict, Tuple, Optional, Union
 import dspy
 import logging
 import json
 import re
+from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
-from .text_utils import normalize_unicode, clean_markdown
-from ..lm_config import get_lm_for_task, LMConfig
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
+from ai_pi.lm_config import get_lm_for_task, LMConfig
+from ai_pi.utils.text_utils import normalize_unicode
+from ai_pi.utils.logging import setup_logging
 
 class HeadingInfo(dspy.Signature):
     """Structured output for a single heading"""
@@ -112,9 +111,7 @@ class SingleContextSectionIdentifier:
         self.section_types = SectionTypes(custom_sections)
         self.structure_predictor = dspy.ChainOfThought(DocumentStructure)
         self.boundary_predictor = dspy.ChainOfThought(ExtractSectionBoundaries)
-    
-    def _clean_markdown(self, text: str) -> str:
-        return clean_markdown(text)
+        self.logger = logging.getLogger('section_identifier')
 
     def _identify_document_structure(self, text: str) -> List[Dict]:
         """First pass: Identify all headings and their levels with line numbers."""
@@ -185,8 +182,8 @@ class SingleContextSectionIdentifier:
                     return headings
             
         except Exception as e:
-            logger.error(f"Error identifying document structure: {str(e)}")
-            logger.exception("Full traceback:")
+            self.logger.error(f"Error identifying document structure: {str(e)}")
+            self.logger.exception("Full traceback:")
             return []
 
     def process_document(self, text: str) -> List[Dict]:
@@ -241,22 +238,21 @@ class SingleContextSectionIdentifier:
             return processed_sections
                 
         except Exception as e:
-            logger.error(f"Error processing document: {str(e)}")
-            logger.exception("Full traceback:")
+            self.logger.error(f"Error processing document: {str(e)}")
+            self.logger.exception("Full traceback:")
             return []
 
 if __name__ == "__main__":
-    # Example usage
     import os
     from dotenv import load_dotenv
     load_dotenv()
     from pathlib import Path
     
-    import logging
-    
-    # Configure logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "section_identifier")
     
     # Use specific file path
     paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")
@@ -264,9 +260,8 @@ if __name__ == "__main__":
         paper_text = f.read()
 
     identifier = SingleContextSectionIdentifier()
-
     sections = identifier.process_document(text=paper_text)
-        
-    # Print results with proper encoding
+    
+    logger.info("Document processing complete. Printing results...")
     print(json.dumps(sections, indent=4, ensure_ascii=False))
 

@@ -16,13 +16,10 @@ import pypandoc
 import logging
 import json
 
-from src.ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
-from src.ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
-from .text_utils import (
-    normalize_unicode,
-    # clean_citations,
-    # clean_xml_and_b64
-)
+from ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
+from ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
+from ai_pi.utils.text_utils import normalize_unicode
+from ai_pi.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +92,7 @@ def get_expanded_range(start: int, end: int, full_text: str, context_window: int
         while expanded_end < text_len and full_text[expanded_end] != '\n\n':
             expanded_end += 1
     
-    # Clean citations from the referenced text before returning
     referenced_text = full_text[expanded_start:expanded_end]
-    #referenced_text = clean_citations(referenced_text)
     
     # Adjust expanded_end based on cleaned text length
     expanded_end = expanded_start + len(referenced_text)
@@ -182,6 +177,8 @@ def get_comment_context(text: str, start_pos: int, end_pos: int, context_chars: 
 
 def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
+    # Create logger inside the function where it's needed
+    logger = logging.getLogger('document_ingestion')
     
     # Create output directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -410,8 +407,6 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         # After extracting full_text from PDF, identify sections
         section_identifier = SingleContextSectionIdentifier()
         try:
-            # Use logger that's now defined
-            logger.info("About to call section_identifier.process_document")
             sections = section_identifier.process_document(full_text)
             logger.info(f"Type of sections returned: {type(sections)}")
             
@@ -512,24 +507,20 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         
         return document_history
 
-#Testing Usage
 if __name__ == "__main__":
-    import os, json
+    import json
+    from pathlib import Path
+    from datetime import datetime
     
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "document_ingestion")
     
-    # Create logger for this module
-    logger = logging.getLogger(__name__)
-        
     logger.info("Starting document extraction")
     document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False)
     
-    # Print summary of processed file
     logger.info("Document processing complete. Printing results...")
     print(json.dumps(document_history, indent=4))
     

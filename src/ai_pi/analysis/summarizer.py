@@ -2,7 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 from typing import List, Dict
 import dspy
-from ..lm_config import get_lm_for_task
+import logging
+from ai_pi.lm_config import get_lm_for_task
+from ai_pi.utils.logging import setup_logging
 
 class SectionSummary(dspy.Signature):
     """Signature for section summarization"""
@@ -39,9 +41,12 @@ class Summarizer:
             lm: Optional dspy.LM instance (falls back to default if None)
             verbose: Enable detailed logging
         """
-        # If LM is provided directly, use it; otherwise get default
+        self.logger = logging.getLogger('summarizer')
         self.lm = lm if isinstance(lm, dspy.LM) else get_lm_for_task("summarization")
         self.verbose = verbose
+        
+        if self.verbose:
+            self.logger.info("Initializing Summarizer")
         
         # Initialize predictors with the configured LM
         with dspy.context(lm=self.lm):
@@ -175,6 +180,14 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     import json
+    from datetime import datetime
+    from pathlib import Path
+    
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "summarizer")
     
     # Configure OpenRouter LLM
     lm = dspy.LM(
@@ -195,4 +208,5 @@ if __name__ == "__main__":
     topic, analyzed_document = context_agent.analyze_sectioned_document(document_json)
     
     # Print results
+    logger.info("Analysis complete. Printing results...")
     print(json.dumps(analyzed_document, indent=4))
