@@ -43,13 +43,13 @@ OLLAMA_LLAMA33_70B = LMConfig(model_name="ollama_chat/llama3.3:latest", api_base
 
 DEFAULT_CONFIGS = {
     "summarization":OPENROUTER_4O,
-    "document_review": OPENROUTER_4O,
-    "section_review": OPENROUTER_4O,
+    "document_review": OPENROUTER_O1_PREVIEW,
+    "section_review": OPENROUTER_SONNET,
     "image_caption_extraction": OLLAMA_LLAMA32_VISION,
     "caption_analysis": OPENROUTER_DEEPSEEK_V3,
     "caption_combination": OPENROUTER_DEEPSEEK_V3,
     "markdown_segmentation": OPENROUTER_DEEPSEEK_V3,
-    "default": OPENROUTER_DEEPSEEK_V3,
+    "default": OLLAMA_LLAMA32_VISION,
 }
 
 def get_lm_for_task(task: str, custom_config: LMConfig = None) -> dspy.LM:
