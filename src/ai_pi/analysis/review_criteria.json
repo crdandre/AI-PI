@@ -42,9 +42,10 @@
             "evidence-based assessment"
         ],
         "context_awareness": [
-            "cross_references",
-            "dependency_handling",
-            "support_validation"
+            "cross-references",
+            "dependency-handling",
+            "support-validation",
+            "completeness of analysis, no missing outputs"
         ]
     },
     "scoring_criteria": {
@@ -56,8 +57,12 @@
             "factors": ["soundness", "reproducibility", "justification"],
             "weights": [0.4, 0.3, 0.3]
         },
+        "novelty": {
+            "factors": ["novelty", "impossible made possible", "new capabilities"],
+            "weights": [0.3, 0.4, 0.3]
+        },
         "impact": {
-            "factors": ["novelty", "significance", "potential_applications"],
+            "factors": ["significance", "potential_applications"],
             "weights": [0.3, 0.4, 0.3]
         },
         "presentation": {
