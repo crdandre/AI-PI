@@ -8,8 +8,9 @@ provide to the review as context
 
 import os
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
-from knowledge_storm.lm import OpenAIModel
 from knowledge_storm.rm import SerperRM
+from ..lm_config import get_lm_for_task
+import logging
 
 class StormContextGenerator:
     def __init__(self, 
@@ -38,19 +39,15 @@ class StormContextGenerator:
         
     def _setup_lm_configs(self):
         self.lm_configs = STORMWikiLMConfigs()
-        openai_kwargs = {
-            'api_key': os.getenv("OPENAI_API_KEY"),
-            'temperature': 1.0,
-            'top_p': 0.9,
-        }
         
-        gpt_4 = OpenAIModel(model='gpt-4', max_tokens=3000, **openai_kwargs)
+        question_lm = get_lm_for_task("storm_questions")
+        writer_lm = get_lm_for_task("storm_writer")
         
-        self.lm_configs.set_conv_simulator_lm(gpt_4)
-        self.lm_configs.set_question_asker_lm(gpt_4)
-        self.lm_configs.set_outline_gen_lm(gpt_4)
-        self.lm_configs.set_article_gen_lm(gpt_4)
-        self.lm_configs.set_article_polish_lm(gpt_4)
+        self.lm_configs.set_conv_simulator_lm(question_lm)
+        self.lm_configs.set_question_asker_lm(question_lm)
+        self.lm_configs.set_outline_gen_lm(writer_lm)
+        self.lm_configs.set_article_gen_lm(writer_lm)
+        self.lm_configs.set_article_polish_lm(writer_lm)
         
     def _setup_engine_args(self):
         self.engine_args = STORMWikiRunnerArguments(
@@ -69,17 +66,31 @@ class StormContextGenerator:
         )
         
     def generate_context(self, topic: str) -> None:
-        runner = STORMWikiRunner(self.engine_args, self.lm_configs, self.rm)
+        logger = logging.getLogger(__name__)
+        logger.info(f"Starting STORM context generation for topic: {topic}")
         
-        runner.run(
-            topic=topic,
-            do_research=self.do_research,
-            do_generate_outline=self.do_generate_outline,
-            do_generate_article=self.do_generate_article,
-            do_polish_article=self.do_polish_article,
-        )
-        runner.post_run()
-        return self.output_dir, runner.summary()
+        try:
+            runner = STORMWikiRunner(self.engine_args, self.lm_configs, self.rm)
+            
+            logger.info("Running STORM analysis...")
+            runner.run(
+                topic=topic,
+                do_research=self.do_research,
+                do_generate_outline=self.do_generate_outline,
+                do_generate_article=self.do_generate_article,
+                do_polish_article=self.do_polish_article,
+            )
+            
+            logger.info("Running post-processing steps...")
+            # runner.post_run()
+            
+            summary = ""#runner.summary()
+            logger.info("STORM context generation complete")
+            return self.output_dir, summary
+            
+        except Exception as e:
+            logger.error(f"Error during STORM context generation: {str(e)}")
+            raise RuntimeError(f"STORM context generation failed: {str(e)}")
     
     
 

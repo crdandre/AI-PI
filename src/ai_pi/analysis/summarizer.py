@@ -21,6 +21,11 @@ class DocumentAnalysis(dspy.Signature):
     relationships = dspy.InputField(desc="Relationship analysis between sections")
     analysis = dspy.OutputField(desc="Comprehensive review-oriented summary")
 
+class TopicExtraction(dspy.Signature):
+    """Signature for extracting concise document topics"""
+    analysis = dspy.InputField(desc="Document analysis text to extract topic from")
+    topic = dspy.OutputField(desc="Concise topic (10 words or less) capturing main document focus")
+
 class Summarizer:
     """
     Analyzes pre-sectioned academic papers using a hierarchical approach that mirrors
@@ -43,6 +48,7 @@ class Summarizer:
             self.section_predictor = dspy.ChainOfThought(SectionSummary)
             self.relationship_predictor = dspy.ChainOfThought(RelationshipAnalysis)
             self.document_predictor = dspy.ChainOfThought(DocumentAnalysis)
+            self.topic_predictor = dspy.ChainOfThought(TopicExtraction)
     
     def analyze_sectioned_document(self, document_json: dict) -> dict:
         """
@@ -81,7 +87,7 @@ class Summarizer:
         if self.verbose:
             print(f"Generated summary tree with {len(section_summaries)} sections")
             
-        return topic, document_json
+        return document_topic, document_json
     
     def _summarize_sections(self, sections: List[Dict]) -> List[Dict]:
         """Create detailed summaries of pre-defined sections"""
@@ -161,12 +167,8 @@ class Summarizer:
             str: A concise topic/title describing the document's main focus
         """
         with dspy.context(lm=self.lm):
-            topic_prompt = dspy.Predict(
-                "Extract a concise (10 words or less) topic that captures the main focus: {analysis}",
-                analysis=dspy.OutputField()
-            )
-            result = topic_prompt(analysis=document_analysis)
-            return result.analysis.strip()
+            result = self.topic_predictor(analysis=document_analysis)
+            return result.topic.strip()
 
 if __name__ == "__main__":
     import os

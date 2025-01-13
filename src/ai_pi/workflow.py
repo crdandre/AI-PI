@@ -87,13 +87,16 @@ class PaperReview:
             topic, document_structure = self.summarizer.analyze_sectioned_document(document_history)
             
             # 2. Use STORM to create an informed and concise topic context
+            self.logger.info("Generating topic context...")
             topic_context = StormContextGenerator(
                 output_dir=output_dir
             ).generate_context(topic)
+            self.logger.info("Topic context generation complete")
 
             # 3. Use Reviewer to handle section-by-section review and final compilation
             self.logger.info("Starting document review...")
             reviewed_document = self.section_reviewer.review_document(document_history, topic_context)
+            self.logger.info("Document review complete")
             
             # Now write the complete reviewed document to JSON
             output_json = output_dir / f"{paper_title}_reviewed.json"
