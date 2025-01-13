@@ -15,16 +15,21 @@ class LMConfig:
     temperature: float = 0.9
     api_base: str = "https://openrouter.ai/api/v1"
     api_key: str = os.getenv("OPENROUTER_API_KEY")
+    max_tokens: str = None
 
     def create_lm(self) -> dspy.LM:
-        return dspy.LM(
-            self.model_name,
-            api_base=self.api_base,
-            api_key=self.api_key,
-            temperature=self.temperature
-        )
+        params = {
+            "model": self.model_name,
+            "api_base": self.api_base,
+            "api_key": self.api_key,
+            "temperature": self.temperature
+        }
+        if self.max_tokens is not None:
+            params["max_tokens"] = self.max_tokens
+        return dspy.LM(**params)
 
-#ADD AS NEEDED        
+#ADD AS NEEDED  
+OPENROUTER_O1_PREVIEW = LMConfig(model_name="openrouter/openai/o1-preview", temperature=1.0, max_tokens=12000)      
 OPENROUTER_4O = LMConfig("openrouter/openai/gpt-4o")
 OPENROUTER_4O_MINI = LMConfig("openrouter/openai/gpt-4o-mini")
 OPENROUTER_SONNET = LMConfig("openrouter/anthropic/claude-3.5-sonnet:beta")
@@ -37,8 +42,9 @@ OLLAMA_LLAMA32_VISION = LMConfig(model_name="ollama_chat/llama3.2-vision:latest"
 OLLAMA_LLAMA33_70B = LMConfig(model_name="ollama_chat/llama3.3:latest", api_base="http://localhost:11434/")
 
 DEFAULT_CONFIGS = {
-    "summarization":OPENROUTER_DEEPSEEK_V3,
-    "review": OPENROUTER_4O,
+    "summarization":OPENROUTER_4O,
+    "document_review": OPENROUTER_4O,
+    "section_review": OPENROUTER_4O,
     "image_caption_extraction": OLLAMA_LLAMA32_VISION,
     "caption_analysis": OPENROUTER_DEEPSEEK_V3,
     "caption_combination": OPENROUTER_DEEPSEEK_V3,

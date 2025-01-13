@@ -36,35 +36,28 @@ class ReviewItem(dspy.Signature):
     match_string = dspy.OutputField(desc="Exact text to match")
     comment = dspy.OutputField(desc="Review comment")
     revision = dspy.OutputField(desc="Complete revised text")
+    section_type = dspy.OutputField(desc="Section where this review item originated")
 
 class GenerateReviewItemsSignature(dspy.Signature):
-    """Signature for scoring paper sections based on defined criteria.
-    
-    Using prior higher-level review context, generate a JSON list of actionable review items in this format.
-    
-    The content of the fields should best serve the end of improving the input text, which is a
-    either part or all of a scientific paper. As such the feedback should be like that from a professor and
-    for a paper written for an expert audience.    
-    
-    Here's an example of the desired output, to be outputted in JSON format (able to be parsed as json).
-    This format is described in ReviewItem definition.
-    
-    review_items: [
-        {
-            "match_string": "The model predicted curve progression with an average error of 5 degrees.",
-            "comment": "The results require statistical validation (e.g., confidence intervals) and 
-                discussion of clinical significance. How does this error rate impact treatment decisions?",
-            "revision": "The model predicted curve progression with an average error of 5° (95% CI: 3.2-6.8°). 
-                This accuracy level is clinically significant as it falls within the threshold needed for 
-                reliable treatment planning (< 7°), based on established clinical guidelines."
-        }
-    ]"""
+    """Signature for generating specific review items and suggested revisions."""
     section_text = dspy.InputField(desc="The text content being reviewed")
     section_type = dspy.InputField(desc="The type of section")
     context = dspy.InputField(desc="Additional context about the paper")
     review_items = dspy.OutputField(
-        desc="List of review items",
-        format=list[ReviewItem]
+        desc="""List of review items in JSON format. Each item must contain:
+        - match_string: The exact text from the paper that needs revision
+        - comment: The review comment explaining what should be changed
+        - revision: The suggested revised text
+        Example format:
+        [
+            {
+                "match_string": "exact text from paper",
+                "comment": "This sentence needs clarification",
+                "revision": "suggested revised text"
+            },
+            ...
+        ]""",
+        format=str
     )
 
 class SectionReviewerSignature(dspy.Signature):
@@ -104,8 +97,8 @@ class Reviewer(dspy.Module):
     def __init__(self, lm=None, verbose=False, validate_reviews=True):
         super().__init__()
         
-        self.lm = get_lm_for_task("review", lm)
-        dspy.configure(lm=self.lm)
+        self.document_review_lm = get_lm_for_task("document_review", lm)
+        self.section_review_lm = get_lm_for_task("section_review", lm)
         
         current_dir = os.path.dirname(os.path.abspath(__file__))
         
@@ -139,14 +132,45 @@ class Reviewer(dspy.Module):
             # 3. Review individual sections with full context
             logger.info("Reviewing individual sections...")
             section_reviews = []
+            all_review_items = []  # Create consolidated list
             for section in [s for s in document_json.get('sections', []) if 'references' not in s.get('section_type', '').lower()]:
-                logger.info(f"Reviewing section: {section['section_type']}")
+                section_type = section.get('section_type', '')
                 review = self._review_section({
                     'text': section.get('text', ''),
-                    'section_type': section.get('section_type', '')
+                    'section_type': section_type
                 }, paper_context=self.paper_knowledge)
+                
+                # Extract and parse review items
+                if 'review_items' in review:
+                    items = review.pop('review_items')
+                    try:
+                        # If items is a JSON string, parse it
+                        if isinstance(items, str):
+                            if items.startswith('```json'):
+                                # Extract JSON content between backticks
+                                json_content = items.split('```json\n')[1].split('\n```')[0]
+                            else:
+                                json_content = items
+                            parsed_items = json.loads(json_content)
+                        else:
+                            # If it's already a list, use it directly
+                            parsed_items = items
+
+                        # Add section information to each review item
+                        for item in parsed_items:
+                            if isinstance(item, dict):
+                                item['section_type'] = section_type
+                                all_review_items.append(item)
+                            
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse review items JSON: {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Error processing review items: {e}")
+                        continue
+
                 section_reviews.append({
-                    'section_type': section['section_type'],
+                    'section_type': section_type,
                     'review': review
                 })
             
@@ -157,20 +181,14 @@ class Reviewer(dspy.Module):
             else:
                 metrics_dict = metrics
 
-            # Flatten review items for easier consumption
-            all_review_items = []
-            for section_review in section_reviews:
-                if isinstance(section_review['review']['review_items'], list):
-                    all_review_items.extend(section_review['review']['review_items'])
-
             # Structure the output with both overall and section-specific metrics
             document_json['reviews'] = {
                 'main_review': main_review,
-                'section_reviews': section_reviews,  # Each section review contains its own metrics
-                'metrics': metrics_dict  # Overall document metrics
+                'section_reviews': section_reviews,  # Section reviews without review items
+                'metrics': metrics_dict
             }
             
-            # Store the flattened review items in a separate key for convenience
+            # Store all review items at top level with section information
             document_json['review_items'] = all_review_items
             
             return document_json
@@ -193,15 +211,16 @@ class Reviewer(dspy.Module):
                 'full_text': '\n'.join(section['text'] for section in document_json['sections'])
             }
             
-            # Get overall document metrics from document reviewer instead
-            review_result = self.document_reviewer(
-                document_text=components['full_text'],
-                context={
-                    'research_problem': components['research_problem'],
-                    'sections': components['sections']
-                },
-                criteria=self.scoring_criteria
-            )
+            # Use context manager for LM
+            with dspy.context(lm=self.document_review_lm):
+                review_result = self.document_reviewer(
+                    document_text=components['full_text'],
+                    context={
+                        'research_problem': components['research_problem'],
+                        'sections': components['sections']
+                    },
+                    criteria=self.scoring_criteria
+                )
             
             components['metrics'] = review_result.metrics
             
@@ -224,25 +243,54 @@ class Reviewer(dspy.Module):
         """Reviews section using separate predictors for high-level review and specific items"""
         section_context = self._build_section_context(section, paper_context)
         
-        with dspy.context(lm=self.lm):
-            # Get high-level review using section-specific reviewer
+        with dspy.context(lm=self.section_review_lm):
             result = self.section_reviewer(
                 section_text=section['text'],
                 section_type=section['section_type'],
                 context=section_context
             )
             
-            # Separately generate review items
+            # Add specific instructions for review items
             review_items_result = self.review_items_generator(
                 section_text=section['text'],
                 section_type=section['section_type'],
-                context=section_context
+                context="""Please identify specific text that needs revision and provide concrete suggestions. 
+                          Focus on clarity, accuracy, and scientific rigor. 
+                          Return only review items in the specified JSON format."""
             )
+            
+            # Parse review items
+            try:
+                if isinstance(review_items_result.review_items, str):
+                    json_str = review_items_result.review_items
+                    if '```json' in json_str:
+                        json_str = json_str.split('```json\n')[1].split('\n```')[0]
+                    review_items = json.loads(json_str)
+                    
+                    # Validate format
+                    if not isinstance(review_items, list):
+                        logger.error("Review items must be a list")
+                        review_items = []
+                    else:
+                        # Filter out invalid items
+                        review_items = [
+                            item for item in review_items
+                            if isinstance(item, dict) and
+                            all(key in item for key in ['match_string', 'comment', 'revision'])
+                        ]
+                else:
+                    review_items = []
+                    
+            except Exception as e:
+                logger.error(f"Error parsing review items: {e}")
+                review_items = []
+
+            logger.debug(f"Generated {len(review_items)} valid review items")
 
             return {
-                'metrics': result.metrics,  # Use metrics from section_reviewer
+                'metrics': result.metrics,
                 'initial_analysis': result.initial_analysis,
-                'review_items': review_items_result.review_items,
+                'review_items': review_items,
                 'cross_references': result.cross_references,
                 'knowledge_gaps': result.knowledge_gaps
             }
@@ -307,7 +355,7 @@ class Reviewer(dspy.Module):
 
     def _generate_main_review(self) -> dict:
         """Generates the main review using DSPy predictors"""
-        with dspy.context(lm=self.lm):
+        with dspy.context(lm=self.document_review_lm):
             result = self.document_reviewer(
                 document_text=self.paper_knowledge['full_text'],
                 context={

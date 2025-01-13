@@ -114,7 +114,7 @@ def output_commented_document(input_doc_path, review_struct, output_doc_path, ma
     # Update how we extract the high-level review
     if 'reviews' in review_struct:
         high_level_review = {
-            'metrics': review_struct['reviews'].get('metrics', 'No metrics provided.'),  # Get metrics directly from review_struct
+            'metrics': review_struct['reviews'].get('metrics', 'No metrics provided.'),
             'overall_assessment': review_struct['reviews'].get('main_review', {}).get('overall_assessment', ''),
             'key_strengths': review_struct['reviews'].get('main_review', {}).get('key_strengths', '').split('\n') 
                 if isinstance(review_struct['reviews'].get('main_review', {}).get('key_strengths'), str) else [],
@@ -143,23 +143,24 @@ def output_commented_document(input_doc_path, review_struct, output_doc_path, ma
     
     # Process review items from section reviews
     print(f"\nProcessing review items:")
-    if 'reviews' in review_struct:
-        # Direct review items
-        if 'review_items' in review_struct['reviews']:
-            for item in review_struct['reviews']['review_items']:
-                if isinstance(item, dict):
-                    all_match_strings.append(item.get('match_string', ''))
-                    all_comments.append(item.get('comment', ''))
-                    all_revisions.append(item.get('revision', ''))
+    
+    # Process top-level review items
+    if 'review_items' in review_struct:
+        for item in review_struct['review_items']:
+            if isinstance(item, dict):
+                all_match_strings.append(item.get('match_string', ''))
+                all_comments.append(item.get('comment', ''))
+                all_revisions.append(item.get('revision', ''))
 
-        # Section review items
-        for section_review in review_struct['reviews'].get('section_reviews', []):
-            if 'review' in section_review and 'review_items' in section_review['review']:
-                for review_item in section_review['review']['review_items']:
-                    if isinstance(review_item, dict):
-                        all_match_strings.append(review_item.get('match_string', ''))
-                        all_comments.append(review_item.get('comment', ''))
-                        all_revisions.append(review_item.get('revision', ''))
+    # # Process section review items from reviews section
+    # if 'reviews' in review_struct:
+    #     for section_review in review_struct['reviews'].get('section_reviews', []):
+    #         if 'review' in section_review and 'review_items' in section_review['review']:
+    #             for review_item in section_review['review']['review_items']:
+    #                 if isinstance(review_item, dict):
+    #                     all_match_strings.append(review_item.get('match_string', ''))
+    #                     all_comments.append(review_item.get('comment', ''))
+    #                     all_revisions.append(review_item.get('revision', ''))
 
     # Add revisions from the revisions section
     for revision in review_struct.get('revisions', []):
@@ -262,7 +263,7 @@ if __name__ == "__main__":
     # Load sample review data from JSON
     import json
     
-    with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250111_070448/ScolioticFEPaper_v7_reviewed.json", "r") as f:
+    with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250113_030430/ScolioticFEPaper_v7_reviewed.json", "r") as f:
         review_data = json.load(f)
     
     # Test paths - adjust these to your actual file locations
@@ -275,4 +276,3 @@ if __name__ == "__main__":
         print(f"Successfully created reviewed document with high-level summary at {output_path}")
     except Exception as e:
         print(f"Error processing document: {str(e)}")
-
