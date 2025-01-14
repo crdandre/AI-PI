@@ -5,8 +5,8 @@
             "avoid": ["detailed method", "result interpretation", "technical detail"]
         },
         "methods": {
-            "focus": ["procedure", "protocol", "technique", "reproducibility", "technical soundness", "methods generate results related to objectives", "no unnecessary analysis/complexity"],
-            "avoid": ["implication", "broader impact", "result interpretation"]
+            "focus": ["procedure", "protocol", "technique", "reproducibility", "technical soundness", "methods generate results related to objectives", "no unnecessary analysis/complexity", "only relevant analyses"],
+            "avoid": ["implication", "broader impact", "result interpretation", "analyses that don't contribute to the findings"]
         },
         "results": {
             "focus": ["outcome", "statistical", "measurement", "data", "factual findings"],
