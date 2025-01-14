@@ -190,10 +190,11 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
     
     document_history = {}
     
-    # Convert DOCX to PDF using pypandoc
+    # First attempt: Direct PDF conversion
     pdf_path = output_dir / f"{paper_title}.pdf"
     full_text = ""
     try:
+        # Try direct conversion to PDF first
         pypandoc.convert_file(
             str(Path(file_path).absolute()),
             "pdf",
@@ -204,14 +205,12 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
                 "-V", "mathfont=DejaVu Math TeX Gyre"
             ]
         )
-            
+        
         pdf_extractor = PDFTextExtractor()
         markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
         
-        print(f"markdown created @ {markdown_path}")
-
-        if not markdown_path:
-            raise ValueError("PDF extraction failed - no markdown path returned")
+        if not markdown_path or not Path(markdown_path).exists():
+            raise ValueError("PDF extraction failed - no valid markdown path returned")
 
         with open(markdown_path, 'r', encoding='utf-8') as f:
             markdown_text = f.read()
@@ -219,12 +218,56 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
                 raise ValueError("Extracted markdown is empty")
             full_text = markdown_text
             document_history['markdown'] = markdown_text
+            
     except Exception as e:
-        print(f"Error in PDF processing: {e}")
-        return None
+        logger.warning(f"Direct PDF conversion failed: {e}. Trying two-step conversion...")
+        
+        try:
+            # Fallback: Two-step conversion through markdown
+            temp_md = output_dir / f"{paper_title}_temp.md"
+            pypandoc.convert_file(
+                str(Path(file_path).absolute()),
+                "markdown_strict",
+                outputfile=str(temp_md.absolute()),
+                extra_args=[
+                    "--wrap=none",
+                    "--columns=1000",
+                    "--atx-headers"
+                ]
+            )
+
+            pypandoc.convert_file(
+                str(temp_md),
+                "pdf",
+                outputfile=str(pdf_path.absolute()),
+                extra_args=[
+                    "--pdf-engine=xelatex",
+                    "-V", "mainfont=DejaVu Sans",
+                    "-V", "geometry:margin=1in",
+                    "--wrap=none",
+                    "--columns=1000"
+                ]
+            )
+            
+            pdf_extractor = PDFTextExtractor()
+            markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
+            
+            if not markdown_path:
+                raise ValueError("PDF extraction failed in fallback approach")
+
+            with open(markdown_path, 'r', encoding='utf-8') as f:
+                markdown_text = f.read()
+                if not markdown_text.strip():
+                    raise ValueError("Extracted markdown is empty")
+                full_text = markdown_text
+                document_history['markdown'] = markdown_text
+                
+        except Exception as fallback_error:
+            logger.error(f"Both conversion approaches failed. Final error: {fallback_error}")
+            return None
 
     if not full_text:
-        print("No text was extracted from the document")
+        logger.error("No text was extracted from the document")
         return None
         
     with zipfile.ZipFile(file_path, 'r') as docx:
@@ -519,7 +562,7 @@ if __name__ == "__main__":
     logger = setup_logging(log_dir, timestamp, "document_ingestion")
     
     logger.info("Starting document extraction")
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False)
+    document_history = extract_document_history("examples/Manuscript_Draft_PreSBReview_Final.docx", write_to_file=False)
     
     logger.info("Document processing complete. Printing results...")
     print(json.dumps(document_history, indent=4))
