@@ -91,63 +91,44 @@ class TopicProcessor(BaseProcessor):
 
 class Summarizer:
     """
-    Analyzes pre-sectioned academic papers using a hierarchical approach that mirrors
-    how PIs review papers. Creates true summary trees where parent nodes
-    summarize their children.
+    Creates a hierarchical summary of an input document. The input is
+    a structured json file with full section text separated by key.
     """
-    def __init__(self, lm: dspy.LM = None, verbose: bool = False):
-        # Configure pipeline steps
+    def __init__(self, verbose: bool = False):
         steps = [
             ProcessingStep(
                 step_type="section",
-                name="section_summary",
                 lm_name="summarization",
-                signatures=[SectionProcessor.Signature],
+                processor_class=SectionProcessor,
                 output_key="section_summaries",
                 depends_on=[]
             ),
             ProcessingStep(
                 step_type="relationship",
-                name="relationship_analysis",
                 lm_name="summarization",
-                signatures=[RelationshipProcessor.Signature],
+                processor_class=RelationshipProcessor,
                 output_key="relationship_analysis",
                 depends_on=["section_summaries"]
             ),
             ProcessingStep(
                 step_type="document",
-                name="document_summary",
                 lm_name="summarization",
-                signatures=[DocumentProcessor.Signature],
+                processor_class=DocumentProcessor,
                 output_key="document_analysis",
                 depends_on=["section_summaries", "relationship_analysis"]
             ),
             ProcessingStep(
                 step_type="topic",
-                name="topic_extraction",
                 lm_name="summarization",
-                signatures=[TopicProcessor.Signature],
+                processor_class=TopicProcessor,
                 output_key="topic",
                 depends_on=["document_analysis"]
             )
         ]
         
-        # Initialize pipeline
         self.pipeline = ProcessingPipeline(
             PipelineConfig(steps=steps, verbose=verbose)
         )
-        
-        # Register processors
-        self.pipeline.register_processor("section", SectionProcessor)
-        self.pipeline.register_processor("relationship", RelationshipProcessor)
-        self.pipeline.register_processor("document", DocumentProcessor)
-        self.pipeline.register_processor("topic", TopicProcessor)
-        
-        # Override LM if provided
-        self.lm = lm if isinstance(lm, dspy.LM) else get_lm_for_task("summarization")
-        if self.lm:
-            for step in steps:
-                step.lm = self.lm
 
     def analyze_sectioned_document(self, document_json: dict) -> dict:
         """
@@ -156,7 +137,6 @@ class Summarizer:
         """
         results = self.pipeline.execute({'sections': document_json['sections']})
         
-        # Create hierarchical summary structure
         hierarchical_summary = {
             'topic': results['topic'],
             'document_summary': {'document_analysis': results['document_analysis']},
@@ -164,9 +144,9 @@ class Summarizer:
             'section_summaries': results['section_summaries']
         }
         
-        # Add summary to document
         document_json['hierarchical_summary'] = hierarchical_summary
         return results['topic'], document_json
+
 
 if __name__ == "__main__":
     from dotenv import load_dotenv

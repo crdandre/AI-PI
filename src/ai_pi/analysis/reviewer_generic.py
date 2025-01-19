@@ -12,33 +12,17 @@ class ReviewStepType(Enum):
     SECTION_REVIEW = "section_review"
     REVIEW_ITEMS = "review_items"
 
-class BaseReviewer(BaseProcessor):
-    """Base reviewer that modifies the document JSON structure"""
     
-    def validate_output(self, output: dict) -> bool:
-        """Validate review items structure is present and contains required fields"""
-        if 'review_items' in output:
-            required_fields = {'match_string', 'comment', 'revision', 'section_type'}
-            return all(
-                isinstance(item, dict) and 
-                all(field in item for field in required_fields)
-                for item in output['review_items']
-            )
-        return True
-
-# Example reviewer implementations
-class PaperKnowledgeBuilder(BaseReviewer):   
-    def process(self, data: dict) -> dict:
-        # Implementation for building paper knowledge
-        raise NotImplementedError()
-    
-class FullDocumentReviewer(BaseReviewer):
+class FullDocumentReviewProcessor(BaseProcessor):
     class Signature(dspy.Signature):
-        """Signature for performing a full document review"""
+        """(You're a freaking genius scientist who is driven by creating insightful publications)
+        Review the entire document and assess it's pros and cons. Think beyond the paper, about
+        the way it addresses it's topic and whether that is best, whether the paper is well-positioned
+        in it's field given current progress, whether the narrative flow is coherent, etc."""
+        
         document_text: str = dspy.InputField(desc="The full text of the document to review")
         context: dict = dspy.InputField(desc="Additional context including research problem, sections, and topic context")
         criteria: dict = dspy.InputField(desc="Review criteria to apply")
-        
         overall_assessment: str = dspy.OutputField(desc="Overall assessment of the document")
         key_strengths: List[str] = dspy.OutputField(desc="List of key strengths identified")
         key_weaknesses: List[str] = dspy.OutputField(desc="List of key weaknesses identified")
@@ -72,29 +56,73 @@ class FullDocumentReviewer(BaseReviewer):
             'global_suggestions': result.global_suggestions
         }
 
+    def validate_output(self, output: dict) -> bool:
+        """No specific validation needed for full document review"""
+        return True
+
+
+class ReviewItemsProcessor(BaseProcessor):
+    class Signature(dspy.Signature):
+        """(You're a freaking genius scientist who is driven by creating insightful publications)
+        Generate a list of relevant review items to address for the writer. These
+        items should exist downstream of the broader review of the paper as concrete steps
+        to realize the improvements suggested. Ensure the broader review's context is
+        reflected in the review items you create."""
+        section_text = dspy.InputField(desc="The text content being reviewed")
+        section_type = dspy.InputField(desc="The type of section")
+        context = dspy.InputField(desc="Additional context about the paper")
+        reason = dspy.OutputField(desc="The thought pattern and origin of the suggestion.")
+        review_items = dspy.OutputField(
+            desc="""List of review items. Each item contains these fields:
+            - match_string: The exact text from the paper that needs revision
+            - comment: The review comment explaining what should be changed
+            - revision: The suggested revised text
+            - section_type: the section in which the item was found
+            
+            The comment and revision fields are each optional but at least
+            one of them must be present (no need for both everytime).
+            
+            If there is neither a comment or revision to be made, do not add the item.
+            """,
+            format=List[Dict]
+        )
+
+    def process(self, data: dict) -> dict:
+        raise NotImplementedError()
+    
+    def validate_output(self, output: dict) -> bool:
+        """Validate review items structure is present and contains required fields"""
+        if 'review_items' in output:
+            required_fields = {'match_string', 'comment', 'revision', 'section_type'}
+            return all(
+                isinstance(item, dict) and 
+                all(field in item for field in required_fields)
+                for item in output['review_items']
+            )
+        else:
+            raise ValueError("Required field 'review_items' not found in output")
+
 
 def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> ProcessingPipeline:
     """Create pipeline with default or custom steps"""
     default_steps = [
         ProcessingStep(
             step_type=ReviewStepType.FULL_DOCUMENT_REVIEW,
-            name="full_document_review",
             lm_name="document_review",
-            signatures=[FullDocumentReviewer.Signature],
+            processor_class=FullDocumentReviewProcessor,
             predictor_type="chain_of_thought",
             depends_on=["hierarchical_summary"],
             output_key="full_document_review",
         ),
+        ProcessingStep(
+            step_type=ReviewStepType.REVIEW_ITEMS,
+            lm_name="review_items",
+            processor_class=ReviewItemsProcessor
+        ),
     ]
     
     steps = custom_steps if custom_steps is not None else default_steps
-    config = PipelineConfig(steps=steps, verbose=True)
-    pipeline = ProcessingPipeline(config)
-    
-    # Register reviewers
-    pipeline.register_processor(ReviewStepType.FULL_DOCUMENT_REVIEW, FullDocumentReviewer)
-    
-    return pipeline
+    return ProcessingPipeline(PipelineConfig(steps=steps, verbose=True))
 
 
 if __name__ == "__main__":
@@ -110,13 +138,12 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     pipeline = create_pipeline()
-    pipeline.register_processor(ReviewStepType.FULL_DOCUMENT_REVIEW, FullDocumentReviewer)
     
     # Example input data with some content
     data = {
         "full_text": "This is a sample document text.",
         "sections": ["Introduction", "Methods", "Results"],
-        "hierarchical_summary": {"key": "value"},  # Required dependency
+        "hierarchical_summary": {"key": "value"},
         "research_problem": "Sample research problem",
         "topic_context": "Sample topic context",
         "criteria": {"quality": "high"}

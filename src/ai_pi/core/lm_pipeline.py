@@ -11,6 +11,7 @@ import dspy
 import logging
 from ai_pi.lm_config import get_lm_for_task
 from ai_pi.core.utils.logging import log_step
+from inspect import isclass
 
 @dataclass
 class ProcessingStep:
@@ -18,8 +19,8 @@ class ProcessingStep:
     
     Attributes:
         step_type: Identifier for the type of processing (usually from an Enum)
-        name: Unique name for this step instance
         lm_name: Name of the language model configuration to use
+        processor_class: Class that implements the processing
         signatures: List of DSPy signatures defining the LLM interaction
         predictor_type: Type of DSPy predictor to use ("predict" or "chain_of_thought")
         depends_on: List of step names whose outputs this step requires
@@ -27,13 +28,23 @@ class ProcessingStep:
         config: Additional configuration parameters specific to this step
     """
     step_type: Union[str, Enum]
-    name: str
     lm_name: str
-    signatures: List[Type[dspy.Signature]]
+    processor_class: Type["BaseProcessor"]
     output_key: str
     predictor_type: Literal["predict", "chain_of_thought"] = "chain_of_thought"
     depends_on: List[str] = field(default_factory=list)
+    signatures: Optional[List[Type[dspy.Signature]]] = None
     config: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Use provided signatures or auto-discover from processor class"""
+        if self.signatures is None:
+            self.signatures = [
+                member for _, member in vars(self.processor_class).items()
+                if isclass(member) and issubclass(member, dspy.Signature) and member != dspy.Signature
+            ]
+        if not self.signatures:
+            raise ValueError(f"No Signature classes found for {self.processor_class.__name__}")
 
 @dataclass
 class PipelineConfig:
@@ -58,7 +69,7 @@ class BaseProcessor(dspy.Module):
         super().__init__()  # Initialize dspy.Module
         self.step = step
         self.lm = get_lm_for_task(step.lm_name)
-        self.logger = logging.getLogger(f"processor.{step.name}")
+        self.logger = logging.getLogger(f"processor.{step.lm_name}")
         
         # Choose predictor type based on configuration
         predictor_class = dspy.ChainOfThought if step.predictor_type == "chain_of_thought" else dspy.Predict
@@ -106,10 +117,15 @@ class ProcessingPipeline(dspy.Module):
     dependencies and storing results.
     """
     def __init__(self, config: PipelineConfig):
-        super().__init__()  # Initialize dspy.Module
+        super().__init__()
         self.config = config
         self.processors: Dict[Union[str, Enum], Type[BaseProcessor]] = {}
         self.logger = logging.getLogger("pipeline")
+        
+        # Auto-register processors from steps
+        for step in config.steps:
+            step_type = step.step_type.value if isinstance(step.step_type, Enum) else step.step_type
+            self.register_processor(step_type, step.processor_class)
 
     def register_processor(self, 
                          step_type: Union[str, Enum], 
@@ -133,7 +149,7 @@ class ProcessingPipeline(dspy.Module):
         """
         for step in self.config.steps:
             if self.config.verbose:
-                self.logger.info(f"Executing step: {step.name}")
+                self.logger.info(f"Executing step: {step.lm_name}")
 
             if step.step_type not in self.processors:
                 raise ValueError(f"No processor registered for step type: {step.step_type}")
@@ -145,7 +161,7 @@ class ProcessingPipeline(dspy.Module):
                     result = processor.process(data)
 
                 if self.config.validation and not processor.validate_output(result):
-                    raise ValidationError(f"Output validation failed for step: {step.name}")
+                    raise ValidationError(f"Output validation failed for step: {step.lm_name}")
 
                 if step.output_key:
                     data[step.output_key] = result
@@ -153,10 +169,10 @@ class ProcessingPipeline(dspy.Module):
                     data.update(result)
                     
                 if self.config.verbose:
-                    self.logger.info(f"Completed step: {step.name}")
+                    self.logger.info(f"Completed step: {step.lm_name}")
 
             except Exception as e:
-                self.logger.error(f"Error in step {step.name}: {str(e)}")
+                self.logger.error(f"Error in step {step.lm_name}: {str(e)}")
                 raise
 
         return data
