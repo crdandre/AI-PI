@@ -40,11 +40,7 @@ class RelationshipProcessor(BaseProcessor):
     
     def process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
-        summary_texts = [
-            f"{s['section_type']}:\n{s['summary']}" 
-            for s in section_summaries
-        ]
-        formatted_summaries = "\n\n".join(summary_texts)
+        formatted_summaries = "\n\n".join(section_summaries)
         
         with dspy.context(lm=self.lm):
             result = self.predictors['Signature'](
@@ -66,10 +62,7 @@ class DocumentProcessor(BaseProcessor):
         section_summaries = data.get('section_summaries', [])
         relationship_analysis = data.get('relationship_analysis', '')
         
-        formatted_summaries = "\n".join(
-            f"{s['section_type']}: {s['summary']}" 
-            for s in section_summaries
-        )
+        formatted_summaries = "\n".join(section_summaries)
         
         with dspy.context(lm=self.lm):
             result = self.predictors['Signature'](
@@ -187,7 +180,7 @@ if __name__ == "__main__":
     console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
     logger.addHandler(console_handler)
     
-    with open("ref/sample_output.json", "r", encoding="utf-8") as f:
+    with open("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250113_222724/ScolioticFEPaper_v7_reviewed.json", "r", encoding="utf-8") as f:
         document_json = json.load(f)
     
     context_agent = Summarizer(verbose=True)
