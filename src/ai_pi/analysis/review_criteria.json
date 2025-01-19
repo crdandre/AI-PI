@@ -1,0 +1,78 @@
+{
+    "section_criteria": {
+        "introduction": {
+            "focus": ["research gap", "objectives", "background", "hypothesis", "problem framing", "literature"],
+            "avoid": ["detailed method", "result interpretation", "technical detail"]
+        },
+        "methods": {
+            "focus": ["procedure", "protocol", "technique", "reproducibility", "technical soundness", "methods generate results related to objectives", "no unnecessary analysis/complexity", "only relevant analyses"],
+            "avoid": ["implication", "broader impact", "result interpretation", "analyses that don't contribute to the findings"]
+        },
+        "results": {
+            "focus": ["outcome", "statistical", "measurement", "data", "factual findings"],
+            "avoid": ["mechanism speculation", "detailed interpretation", "broader implications"]
+        },
+        "discussion": {
+            "focus": ["interpretation", "implication", "limitations with either reasons they're mitigated or not", "context", "literature comparison"],
+            "avoid": ["new result data", "detailed method description", "raw data"]
+        },
+        "abstract": {
+            "focus": ["summary", "overview", "key finding", "balance"],
+            "avoid": ["technical detail", "extensive background", "detailed method"]
+        }
+    },
+    "review_quality_criteria": {
+        "depth": [
+            "theoretical foundation",
+            "methodological rationale",
+            "alternative approaches",
+            "limitations analysis",
+            "broader implications"
+        ],
+        "integration": [
+            "cross-section connections",
+            "literature synthesis",
+            "field positioning",
+            "future directions",
+            "contributions relevant to existing work mentioned in context",
+        ],
+        "specificity": [
+            "concrete examples",
+            "detailed critiques",
+            "actionable suggestions",
+            "evidence-based assessment"
+        ],
+        "context_awareness": [
+            "cross-references",
+            "dependency-handling",
+            "support-validation",
+            "completeness of analysis, no missing outputs"
+        ]
+    },
+    "scoring_criteria": {
+        "clarity": {
+            "factors": ["organization", "language", "flow"],
+            "weights": [0.4, 0.3, 0.3]
+        },
+        "methodology": {
+            "factors": ["soundness", "reproducibility", "justification"],
+            "weights": [0.4, 0.3, 0.3]
+        },
+        "novelty": {
+            "factors": ["novelty", "impossible made possible", "new capabilities"],
+            "weights": [0.3, 0.4, 0.3]
+        },
+        "impact": {
+            "factors": ["significance", "potential_applications"],
+            "weights": [0.3, 0.4, 0.3]
+        },
+        "presentation": {
+            "factors": ["figure_quality", "structure", "readability"],
+            "weights": [0.3, 0.3, 0.4]
+        },
+        "literature_integration": {
+            "factors": ["coverage", "synthesis", "context"],
+            "weights": [0.3, 0.4, 0.3]
+        }
+    }
+}

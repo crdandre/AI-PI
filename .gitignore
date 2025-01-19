@@ -54,3 +54,5 @@ journal/
 temp/
 
 **/node_modules/
+
+study_design.md

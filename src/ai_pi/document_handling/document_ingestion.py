@@ -16,13 +16,10 @@ import pypandoc
 import logging
 import json
 
-from src.ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
-from src.ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
-from .text_utils import (
-    normalize_unicode,
-    # clean_citations,
-    # clean_xml_and_b64
-)
+from ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
+from ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
+from ai_pi.utils.text_utils import normalize_unicode
+from ai_pi.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +40,8 @@ class Comment(TypedDict):
     text: str
     author: str
     date: str
-    position: Dict[str, int]
-    referenced_text: str
+    original_text: str  # The exact text that was commented
+    match_string: str   # Expanded context for matching
     resolved: bool
     replies: List['Comment']
     related_revision_id: Optional[str]
@@ -95,9 +92,7 @@ def get_expanded_range(start: int, end: int, full_text: str, context_window: int
         while expanded_end < text_len and full_text[expanded_end] != '\n\n':
             expanded_end += 1
     
-    # Clean citations from the referenced text before returning
     referenced_text = full_text[expanded_start:expanded_end]
-    #referenced_text = clean_citations(referenced_text)
     
     # Adjust expanded_end based on cleaned text length
     expanded_end = expanded_start + len(referenced_text)
@@ -172,8 +167,18 @@ def extract_section_text(full_text: str, start_match: str, end_match: str, secti
         return ""
 
 
+def get_comment_context(text: str, start_pos: int, end_pos: int, context_chars: int = 100) -> str:
+    """Get surrounding context for a comment, up to context_chars in each direction."""
+    text_len = len(text)
+    context_start = max(0, start_pos - context_chars)
+    context_end = min(text_len, end_pos + context_chars)
+    return text[context_start:context_end]
+
+
 def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
+    # Create logger inside the function where it's needed
+    logger = logging.getLogger('document_ingestion')
     
     # Create output directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -185,10 +190,11 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
     
     document_history = {}
     
-    # Convert DOCX to PDF using pypandoc
+    # First attempt: Direct PDF conversion
     pdf_path = output_dir / f"{paper_title}.pdf"
     full_text = ""
     try:
+        # Try direct conversion to PDF first
         pypandoc.convert_file(
             str(Path(file_path).absolute()),
             "pdf",
@@ -199,14 +205,12 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
                 "-V", "mathfont=DejaVu Math TeX Gyre"
             ]
         )
-            
+        
         pdf_extractor = PDFTextExtractor()
         markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
         
-        print(f"markdown created @ {markdown_path}")
-
-        if not markdown_path:
-            raise ValueError("PDF extraction failed - no markdown path returned")
+        if not markdown_path or not Path(markdown_path).exists():
+            raise ValueError("PDF extraction failed - no valid markdown path returned")
 
         with open(markdown_path, 'r', encoding='utf-8') as f:
             markdown_text = f.read()
@@ -214,12 +218,56 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
                 raise ValueError("Extracted markdown is empty")
             full_text = markdown_text
             document_history['markdown'] = markdown_text
+            
     except Exception as e:
-        print(f"Error in PDF processing: {e}")
-        return None
+        logger.warning(f"Direct PDF conversion failed: {e}. Trying two-step conversion...")
+        
+        try:
+            # Fallback: Two-step conversion through markdown
+            temp_md = output_dir / f"{paper_title}_temp.md"
+            pypandoc.convert_file(
+                str(Path(file_path).absolute()),
+                "markdown_strict",
+                outputfile=str(temp_md.absolute()),
+                extra_args=[
+                    "--wrap=none",
+                    "--columns=1000",
+                    "--atx-headers"
+                ]
+            )
+
+            pypandoc.convert_file(
+                str(temp_md),
+                "pdf",
+                outputfile=str(pdf_path.absolute()),
+                extra_args=[
+                    "--pdf-engine=xelatex",
+                    "-V", "mainfont=DejaVu Sans",
+                    "-V", "geometry:margin=1in",
+                    "--wrap=none",
+                    "--columns=1000"
+                ]
+            )
+            
+            pdf_extractor = PDFTextExtractor()
+            markdown_path = pdf_extractor.extract_pdf(str(pdf_path))
+            
+            if not markdown_path:
+                raise ValueError("PDF extraction failed in fallback approach")
+
+            with open(markdown_path, 'r', encoding='utf-8') as f:
+                markdown_text = f.read()
+                if not markdown_text.strip():
+                    raise ValueError("Extracted markdown is empty")
+                full_text = markdown_text
+                document_history['markdown'] = markdown_text
+                
+        except Exception as fallback_error:
+            logger.error(f"Both conversion approaches failed. Final error: {fallback_error}")
+            return None
 
     if not full_text:
-        print("No text was extracted from the document")
+        logger.error("No text was extracted from the document")
         return None
         
     with zipfile.ZipFile(file_path, 'r') as docx:
@@ -242,25 +290,60 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             'revisions': []
         }
 
-        # Find all comment reference marks and their positions
-        comment_positions = {}
-        position_counter = 0
+        # Find all comment reference marks and their referenced text
+        comment_references = {}
+        current_comment_id = None
+        current_text = []
+        context_window = 200  # Increased from 50 to 200 characters
         
         for element in tree.iter():
-            # Track text content for position counting
-            if element.tag == f'{{{namespace["w"]}}}t':
-                position_counter += len(element.text if element.text else '')
+            if element.tag == f'{{{namespace["w"]}}}commentRangeStart':
+                current_comment_id = element.get(f'{{{namespace["w"]}}}id')
+                current_text = []
             
-            # Find comment start and end markers
-            elif element.tag == f'{{{namespace["w"]}}}commentRangeStart':
-                comment_id = element.get(f'{{{namespace["w"]}}}id')
-                if comment_id not in comment_positions:
-                    comment_positions[comment_id] = {'start': position_counter}
+            elif element.tag == f'{{{namespace["w"]}}}t' and current_comment_id:
+                # Get surrounding text nodes for context
+                prev_text = []
+                next_text = []
+                
+                # Look for previous siblings
+                current = element
+                while current is not None and len(''.join(prev_text)) < context_window:
+                    if current.getprevious() is not None:
+                        current = current.getprevious()
+                    elif current.getparent() is not None:
+                        current = current.getparent()
+                    else:
+                        break
+                    if current.tag == f'{{{namespace["w"]}}}t':
+                        prev_text.insert(0, current.text if current.text else '')
+                
+                # Look for next siblings
+                current = element
+                while current is not None and len(''.join(next_text)) < context_window:
+                    if current.getnext() is not None:
+                        current = current.getnext()
+                    elif current.getparent() is not None:
+                        current = current.getparent().getnext()
+                    else:
+                        break
+                    if current is not None and current.tag == f'{{{namespace["w"]}}}t':
+                        next_text.append(current.text if current.text else '')
+                
+                # Combine context with current text
+                full_context = (
+                    ''.join(prev_text).strip() + 
+                    ' ' + (element.text if element.text else '').strip() + 
+                    ' ' + ''.join(next_text).strip()
+                ).strip()
+                current_text.append(full_context)
             
             elif element.tag == f'{{{namespace["w"]}}}commentRangeEnd':
                 comment_id = element.get(f'{{{namespace["w"]}}}id')
-                if comment_id in comment_positions:
-                    comment_positions[comment_id]['end'] = position_counter
+                if comment_id == current_comment_id:
+                    comment_references[comment_id] = ' '.join(current_text).strip()
+                    current_comment_id = None
+                    current_text = []
 
         # Reset position counter for revisions
         position_counter = 0
@@ -315,27 +398,27 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             
             comment_counter = 0
             for comment in comments_tree.findall('.//w:comment', namespace):
-                original_id = comment.get('{%s}id' % namespace['w'])
-                new_id = str(comment_counter)
+                original_id = comment.get(f'{{{namespace["w"]}}}id')
+                original_text = comment_references.get(original_id, '')
                 
-                position = comment_positions.get(original_id, {'start': 0, 'end': 0})
-                
-                start = position['start']
-                end = position['end']
-                expanded_start, expanded_end = get_expanded_range(start, end, full_text)
+                # Find position of original text in full document
+                text_pos = full_text.find(original_text)
+                if text_pos != -1:
+                    expanded_context = get_comment_context(
+                        full_text, 
+                        text_pos, 
+                        text_pos + len(original_text)
+                    )
+                else:
+                    expanded_context = original_text
                 
                 comment_data = {
-                    'id': new_id,
+                    'id': str(comment_counter),
                     'text': ''.join(comment.itertext()),
                     'author': comment.get('{%s}author' % namespace['w']),
                     'date': comment.get('{%s}date' % namespace['w']),
-                    'position': {
-                        'start': start,
-                        'end': end,
-                        'expanded_start': expanded_start,
-                        'expanded_end': expanded_end
-                    },
-                    'referenced_text': full_text[expanded_start:expanded_end],
+                    'original_text': original_text,
+                    'match_string': expanded_context,
                     'resolved': comment.get('{%s}resolved' % namespace['w']) == 'true',
                     'replies': [],
                     'related_revision_id': None
@@ -367,8 +450,6 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         # After extracting full_text from PDF, identify sections
         section_identifier = SingleContextSectionIdentifier()
         try:
-            # Use logger that's now defined
-            logger.info("About to call section_identifier.process_document")
             sections = section_identifier.process_document(full_text)
             logger.info(f"Type of sections returned: {type(sections)}")
             
@@ -469,24 +550,20 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         
         return document_history
 
-#Testing Usage
 if __name__ == "__main__":
-    import os, json
+    import json
+    from pathlib import Path
+    from datetime import datetime
     
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "document_ingestion")
     
-    # Create logger for this module
-    logger = logging.getLogger(__name__)
-        
     logger.info("Starting document extraction")
-    document_history = extract_document_history("examples/ScolioticFEPaper_v7.docx", write_to_file=False)
+    document_history = extract_document_history("examples/Manuscript_Draft_PreSBReview_Final.docx", write_to_file=False)
     
-    # Print summary of processed file
     logger.info("Document processing complete. Printing results...")
     print(json.dumps(document_history, indent=4))
     

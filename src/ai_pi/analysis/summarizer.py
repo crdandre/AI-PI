@@ -2,7 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 from typing import List, Dict
 import dspy
-from ..lm_config import get_lm_for_task
+import logging
+from ai_pi.lm_config import get_lm_for_task
+from ai_pi.utils.logging import setup_logging
 
 class SectionSummary(dspy.Signature):
     """Signature for section summarization"""
@@ -21,6 +23,11 @@ class DocumentAnalysis(dspy.Signature):
     relationships = dspy.InputField(desc="Relationship analysis between sections")
     analysis = dspy.OutputField(desc="Comprehensive review-oriented summary")
 
+class TopicExtraction(dspy.Signature):
+    """Signature for extracting concise document topics"""
+    analysis = dspy.InputField(desc="Document analysis text to extract topic from")
+    topic = dspy.OutputField(desc="Concise topic (10 words or less) capturing main document focus")
+
 class Summarizer:
     """
     Analyzes pre-sectioned academic papers using a hierarchical approach that mirrors
@@ -34,15 +41,19 @@ class Summarizer:
             lm: Optional dspy.LM instance (falls back to default if None)
             verbose: Enable detailed logging
         """
-        # If LM is provided directly, use it; otherwise get default
+        self.logger = logging.getLogger('summarizer')
         self.lm = lm if isinstance(lm, dspy.LM) else get_lm_for_task("summarization")
         self.verbose = verbose
+        
+        if self.verbose:
+            self.logger.info("Initializing Summarizer")
         
         # Initialize predictors with the configured LM
         with dspy.context(lm=self.lm):
             self.section_predictor = dspy.ChainOfThought(SectionSummary)
             self.relationship_predictor = dspy.ChainOfThought(RelationshipAnalysis)
             self.document_predictor = dspy.ChainOfThought(DocumentAnalysis)
+            self.topic_predictor = dspy.ChainOfThought(TopicExtraction)
     
     def analyze_sectioned_document(self, document_json: dict) -> dict:
         """
@@ -64,20 +75,24 @@ class Summarizer:
             relationship_summary
         )
         
-        # 4. Create hierarchical summary structure
+        # 4. Extract topic from Abstract
+        document_topic = self._get_document_topic(document_summary['document_analysis'])
+        
+        # 5. Create hierarchical summary structure
         hierarchical_summary = {
+            'topic': document_topic,
             'document_summary': document_summary,
             'relationship_summary': relationship_summary,
             'section_summaries': section_summaries
         }
         
-        # 5. Add the hierarchical summary to the input document
+        # 6. Add the hierarchical summary to the input document
         document_json['hierarchical_summary'] = hierarchical_summary
         
         if self.verbose:
             print(f"Generated summary tree with {len(section_summaries)} sections")
             
-        return document_json
+        return document_topic, document_json
     
     def _summarize_sections(self, sections: List[Dict]) -> List[Dict]:
         """Create detailed summaries of pre-defined sections"""
@@ -146,11 +161,33 @@ class Summarizer:
                 'document_analysis': result.analysis
             }
 
+    def _get_document_topic(self, document_analysis: str) -> str:
+        """
+        Extract a concise topic description from the document analysis.
+        
+        Args:
+            document_analysis: String containing the comprehensive document analysis
+            
+        Returns:
+            str: A concise topic/title describing the document's main focus
+        """
+        with dspy.context(lm=self.lm):
+            result = self.topic_predictor(analysis=document_analysis)
+            return result.topic.strip()
+
 if __name__ == "__main__":
     import os
     from dotenv import load_dotenv
     load_dotenv()
     import json
+    from datetime import datetime
+    from pathlib import Path
+    
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "summarizer")
     
     # Configure OpenRouter LLM
     lm = dspy.LM(
@@ -168,7 +205,8 @@ if __name__ == "__main__":
     context_agent = Summarizer(lm=lm, verbose=True)
     
     # Process document
-    analyzed_document = context_agent.analyze_sectioned_document(document_json)
+    topic, analyzed_document = context_agent.analyze_sectioned_document(document_json)
     
     # Print results
+    logger.info("Analysis complete. Printing results...")
     print(json.dumps(analyzed_document, indent=4))

@@ -4,53 +4,31 @@ from datetime import datetime
 from pathlib import Path
 import dspy
 import json
+import copy
+from ai_pi.lm_config import DEFAULT_CONFIGS
 
+from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer
 from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
 from ai_pi.document_handling.document_ingestion import extract_document_history
+from ai_pi.utils.logging import setup_logging
 
 
 class PaperReview:
     def __init__(self, verbose=False, log_dir="logs", reviewer_class="Predict"):
-        """Initialize components using task-specific LM configurations from lm_config.py"""
+        """Initialize components using task-specific LM configurations"""
         # Initialize components with task-specific LMs
-        self.summarizer = Summarizer(verbose=verbose)  # Will use summarization LM config
-        self.section_reviewer = Reviewer(
-            reviewer_class=reviewer_class,
-            verbose=verbose
-        )  # Will use review LM config
-        
+        self.summarizer = Summarizer(verbose=verbose)
+        self.section_reviewer = Reviewer(verbose=verbose, validate_reviews=False)
         self.verbose = verbose
         
         # Setup logging
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
-        
-        # Create a unique log file for this review session
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = self.log_dir / f"paper_review_{timestamp}.log"
+        self.logger = setup_logging(self.log_dir, timestamp, "paper_review")
         
-        # Configure logging
-        self.logger = logging.getLogger(f"paper_review_{timestamp}")
-        self.logger.setLevel(logging.DEBUG)
-        
-        # File handler for detailed logging
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(file_formatter)
-        self.logger.addHandler(file_handler)
-        
-        # Console handler for abbreviated logging
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
-        console_handler.setFormatter(console_formatter)
-        self.logger.addHandler(console_handler)
-    
     def review_paper(self, input_doc_path: str) -> dict:
         """Two-step review process with proper section handling"""
         self.logger.info(f"Starting review of document: {input_doc_path}")
@@ -62,6 +40,24 @@ class PaperReview:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_dir = base_dir / f"{paper_title}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save LM configuration state
+            lm_config_state = {
+                "timestamp": timestamp,
+                "configs": {
+                    task: {
+                        "model_name": config.model_name,
+                        "temperature": config.temperature,
+                        "api_base": config.api_base,
+                        "max_tokens": config.max_tokens
+                    } for task, config in copy.deepcopy(DEFAULT_CONFIGS).items()
+                }
+            }
+            
+            config_json = output_dir / "lm_config_state.json"
+            with open(config_json, 'w', encoding='utf-8') as f:
+                json.dump(lm_config_state, f, indent=4)
+            self.logger.info(f"LM configuration state saved to: {config_json}")
 
             # Extract document content
             document_history = extract_document_history(
@@ -83,11 +79,19 @@ class PaperReview:
             
             # 1. Use Summarizer to analyze document structure
             self.logger.info("Analyzing document structure...")
-            document_structure = self.summarizer.analyze_sectioned_document(document_history)
+            topic, document_structure = self.summarizer.analyze_sectioned_document(document_history)
             
-            # 2. Use Reviewer to handle section-by-section review and final compilation
+            # 2. Use STORM to create an informed and concise topic context
+            self.logger.info("Generating topic context...")
+            topic_context = StormContextGenerator(
+                output_dir=output_dir
+            ).generate_context(topic)
+            self.logger.info("Topic context generation complete")
+
+            # 3. Use Reviewer to handle section-by-section review and final compilation
             self.logger.info("Starting document review...")
-            reviewed_document = self.section_reviewer.review_document(document_history)
+            reviewed_document = self.section_reviewer.review_document(document_history, topic_context)
+            self.logger.info("Document review complete")
             
             # Now write the complete reviewed document to JSON
             output_json = output_dir / f"{paper_title}_reviewed.json"
@@ -101,8 +105,9 @@ class PaperReview:
             self.logger.info(f"Generating reviewed document at: {output_path}")
             output_commented_document(
                 input_doc_path=input_doc_path,
-                document_review_items=reviewed_document['reviews'],
-                output_doc_path=output_path
+                review_struct=reviewed_document,
+                output_doc_path=output_path,
+                match_threshold=90
             )
             self.logger.debug("Document generation complete")
             
@@ -115,7 +120,8 @@ class PaperReview:
                     'pdf': str(output_dir / f"{paper_title}.pdf"),
                     'markdown': str(output_dir / f"{paper_title}.md"),
                     'json': str(output_json),
-                    'reviewed_docx': str(output_path)
+                    'reviewed_docx': str(output_path),
+                    'lm_config': str(config_json)
                 }
             }
             
@@ -126,7 +132,7 @@ class PaperReview:
 
 if __name__ == "__main__":
     # Example usage with different configuration approaches
-    input_path = "examples/ScolioticFEPaper_v7.docx"
+    input_path = "examples/DistractionCompressionPSRS2024Abstract.docx"
     
     paper_review = PaperReview(verbose=True)
     

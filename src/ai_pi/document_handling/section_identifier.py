@@ -1,14 +1,13 @@
-from typing import List, Dict, Tuple, Optional, Union
 import dspy
 import logging
 import json
 import re
+from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
-from .text_utils import normalize_unicode, clean_markdown
-from ..lm_config import get_lm_for_task, LMConfig
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
+from ai_pi.lm_config import get_lm_for_task, LMConfig
+from ai_pi.utils.text_utils import normalize_unicode
+from ai_pi.utils.logging import setup_logging
 
 class HeadingInfo(dspy.Signature):
     """Structured output for a single heading"""
@@ -68,19 +67,51 @@ def _clean_and_parse_json(json_str: str) -> List[Dict]:
             logger.debug(f"Problematic JSON string: {cleaned}")
             return []
 
+class SectionTypes:
+    """Dynamic section type management"""
+    
+    # Base sections that can be extended
+    DEFAULT_SECTIONS = {
+        'Abstract': ['abstract', 'summary'],
+        'Introduction': ['introduction', 'background'],
+        'Methods': ['methods', 'methodology', 'materials and methods', 'experimental'],
+        'Results': ['results', 'findings', 'observations'],
+        'Discussion': ['discussion', 'interpretation'],
+        'Conclusions': ['conclusions', 'concluding remarks'],
+        'References': ['references', 'bibliography', 'works cited'],
+        'Other': ['other']
+    }
+    
+    def __init__(self, custom_sections: Dict[str, List[str]] = None):
+        self.sections = self.DEFAULT_SECTIONS.copy()
+        if custom_sections:
+            self.sections.update(custom_sections)
+    
+    def normalize_section_type(self, heading: str) -> str:
+        """Match heading to canonical section type"""
+        heading_lower = heading.lower().strip()
+        for canonical, variants in self.sections.items():
+            if heading_lower in [v.lower() for v in variants]:
+                return canonical
+        return 'Other'
+    
+    def get_main_sections(self) -> List[str]:
+        """Get list of main section types (excluding 'Other')"""
+        return [s for s in self.sections.keys() if s != 'Other']
+
 class SingleContextSectionIdentifier:
     """Identifies academic paper sections using LLM in two passes:
     1. Identify document structure (headings and their levels)
     2. Extract main sections with their boundary strings
     """
     
-    def __init__(self, lm: Union[LMConfig, dspy.LM] = None):
+    def __init__(self, lm: Union[LMConfig, dspy.LM] = None, 
+                 custom_sections: Dict[str, List[str]] = None):
         self.lm = get_lm_for_task("section_identification") if lm is None else lm
+        self.section_types = SectionTypes(custom_sections)
         self.structure_predictor = dspy.ChainOfThought(DocumentStructure)
         self.boundary_predictor = dspy.ChainOfThought(ExtractSectionBoundaries)
-    
-    def _clean_markdown(self, text: str) -> str:
-        return clean_markdown(text)
+        self.logger = logging.getLogger('section_identifier')
 
     def _identify_document_structure(self, text: str) -> List[Dict]:
         """First pass: Identify all headings and their levels with line numbers."""
@@ -106,7 +137,7 @@ class SingleContextSectionIdentifier:
                     For each heading, output a JSON object with:
                     - level: number of # characters
                     - text: the heading text
-                    - section_type: classify as one of [Abstract, Introduction, Methods, Results, Discussion, Conclusions, References, Other]
+                    - section_type: classify as one of {self.section_types.get_main_sections() + ['Other']}
                     
                     Focus on identifying main sections. Subsections should be classified as "Other".
                     
@@ -151,8 +182,8 @@ class SingleContextSectionIdentifier:
                     return headings
             
         except Exception as e:
-            logger.error(f"Error identifying document structure: {str(e)}")
-            logger.exception("Full traceback:")
+            self.logger.error(f"Error identifying document structure: {str(e)}")
+            self.logger.exception("Full traceback:")
             return []
 
     def process_document(self, text: str) -> List[Dict]:
@@ -166,8 +197,7 @@ class SingleContextSectionIdentifier:
             headings = self._identify_document_structure(text)
             
             # Filter for main section headings and sort by line number
-            main_sections = ['Abstract', 'Introduction', 'Methods', 'Results', 'Discussion', 
-                           'Conclusions', 'References']
+            main_sections = self.section_types.get_main_sections()
             main_headings = [h for h in headings 
                            if h['section_type'] in main_sections]
             main_headings.sort(key=lambda x: x['line_number'])
@@ -208,46 +238,30 @@ class SingleContextSectionIdentifier:
             return processed_sections
                 
         except Exception as e:
-            logger.error(f"Error processing document: {str(e)}")
-            logger.exception("Full traceback:")
+            self.logger.error(f"Error processing document: {str(e)}")
+            self.logger.exception("Full traceback:")
             return []
 
 if __name__ == "__main__":
-    # Example usage
     import os
     from dotenv import load_dotenv
     load_dotenv()
     from pathlib import Path
     
-    import logging
-    
-    # Configure logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    # Setup logging using the centralized configuration
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    logger = setup_logging(log_dir, timestamp, "section_identifier")
     
     # Use specific file path
     paper_path = Path("/home/christian/projects/agents/ai_pi/processed_documents/ScolioticFEPaper_v7_20250107_010732/ScolioticFEPaper_v7/ScolioticFEPaper_v7.md")
     with open(paper_path, 'r', encoding='utf-8') as f:
         paper_text = f.read()
-        
-    # openrouter_model = 'openrouter/google/gemini-2.0-flash-exp:free'
-    # openrouter_model = 'openrouter/google/learnlm-1.5-pro-experimental:free'
-    # openrouter_model = 'openrouter/anthropic/claude-3.5-haiku'
-    # openrouter_model = 'openrouter/deepseek/deepseek-chat'
-    openrouter_model = 'openrouter/openai/gpt-4o'
-    
-    # Initialize and run
-    lm = dspy.LM(
-        openrouter_model,
-        api_base="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        temperature=0.01,
-    )
 
-    identifier = SingleContextSectionIdentifier(lm=lm)
-
+    identifier = SingleContextSectionIdentifier()
     sections = identifier.process_document(text=paper_text)
-        
-    # Print results with proper encoding
+    
+    logger.info("Document processing complete. Printing results...")
     print(json.dumps(sections, indent=4, ensure_ascii=False))
 
