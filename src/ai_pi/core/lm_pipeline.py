@@ -30,9 +30,9 @@ class ProcessingStep:
     name: str
     lm_name: str
     signatures: List[Type[dspy.Signature]]
+    output_key: str
     predictor_type: Literal["predict", "chain_of_thought"] = "chain_of_thought"
     depends_on: List[str] = field(default_factory=list)
-    output_key: str = field(default="")
     config: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
