@@ -1,6 +1,47 @@
 from pathlib import Path
 import logging
 from datetime import datetime
+import functools
+import time
+
+def log_step(logger_name: str = None):
+    """
+    Decorator to log the start and end of processing steps, including LLM info.
+    
+    Args:
+        logger_name: Optional name for the logger. If None, uses the class name
+    
+    Returns:
+        Decorator function that logs step execution
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Get logger name from parameter or class name
+            _logger_name = logger_name or args[0].__class__.__name__
+            logger = logging.getLogger(_logger_name)
+            
+            # Get LLM info from step configuration
+            processor = args[0]
+            llm_info = f" using {processor.step.lm_name}"
+            
+            # Log start
+            logger.info(f"Starting step: {func.__name__}{llm_info}")
+            start_time = time.time()
+            
+            try:
+                result = func(*args, **kwargs)
+                # Log successful completion
+                duration = time.time() - start_time
+                logger.info(f"Completed step: {func.__name__}{llm_info} (duration: {duration:.2f}s)")
+                return result
+            except Exception as e:
+                # Log failure
+                logger.error(f"Failed step: {func.__name__}{llm_info} - {str(e)}")
+                raise
+                
+        return wrapper
+    return decorator
 
 def setup_logging(log_dir: Path, timestamp: str, logger_name: str = None) -> logging.Logger:
     """

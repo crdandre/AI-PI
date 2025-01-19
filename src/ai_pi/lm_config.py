@@ -48,8 +48,8 @@ class Models:
 
 DEFAULT_CONFIGS: Dict[str, LMConfig] = {
     "summarization": Models.OpenRouter.DEEPSEEK_V3,
-    "document_review": Models.OpenRouter.O1_PREVIEW,
-    "section_review": Models.OpenRouter.CLAUDE_SONNET,
+    "document_review": Models.OpenRouter.DEEPSEEK_V3,
+    "section_review": Models.OpenRouter.DEEPSEEK_V3,
     "image_caption_extraction": Models.Ollama.LLAMA32_VISION,
     "caption_analysis": Models.OpenRouter.DEEPSEEK_V3,
     "caption_combination": Models.Ollama.LLAMA32_VISION,

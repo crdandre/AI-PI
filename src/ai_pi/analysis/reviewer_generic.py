@@ -83,15 +83,48 @@ def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> Proc
             signatures=[FullDocumentReviewer.Signature],
             predictor_type="chain_of_thought",
             depends_on=["hierarchical_summary"],
-            output_key=["full_document_review"],
+            output_key="full_document_review",
         ),
     ]
     
     steps = custom_steps if custom_steps is not None else default_steps
-    config = PipelineConfig(steps=steps)
+    config = PipelineConfig(steps=steps, verbose=True)
     pipeline = ProcessingPipeline(config)
     
     # Register reviewers
     pipeline.register_processor(ReviewStepType.FULL_DOCUMENT_REVIEW, FullDocumentReviewer)
     
     return pipeline
+
+
+if __name__ == "__main__":
+    import logging
+    
+    # Setup basic logging with a handler
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    logger.addHandler(console_handler)
+
+    pipeline = create_pipeline()
+    pipeline.register_processor(ReviewStepType.FULL_DOCUMENT_REVIEW, FullDocumentReviewer)
+    
+    # Example input data with some content
+    data = {
+        "full_text": "This is a sample document text.",
+        "sections": ["Introduction", "Methods", "Results"],
+        "hierarchical_summary": {"key": "value"},  # Required dependency
+        "research_problem": "Sample research problem",
+        "topic_context": "Sample topic context",
+        "criteria": {"quality": "high"}
+    }
+    
+    results = pipeline.execute(data)
+    
+    # Print results in a readable JSON format
+    import json
+    print("\nPipeline Results:")
+    print(json.dumps(results, indent=2))

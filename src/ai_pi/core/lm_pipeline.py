@@ -10,6 +10,7 @@ from enum import Enum
 import dspy
 import logging
 from ai_pi.lm_config import get_lm_for_task
+from ai_pi.core.utils.logging import log_step
 
 @dataclass
 class ProcessingStep:
@@ -66,6 +67,7 @@ class BaseProcessor(dspy.Module):
             for sig in step.signatures
         }
 
+    @log_step()
     def process(self, data: dict) -> dict:
         """Process the input data and return results.
         Args:
