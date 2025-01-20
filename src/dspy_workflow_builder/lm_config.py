@@ -31,9 +31,10 @@ class LMConfig:
 
     
 class PredictorType(Enum):
-    """Types of DSPy predictors available"""
-    PREDICT = "predict"
-    CHAIN_OF_THOUGHT = "chain_of_thought"
+    """Maps known DSPy modules for LM requests"""
+    CHAIN_OF_THOUGHT = "ChainOfThought"
+    REACT_AGENT = "ReAct"
+    PREDICT = "Predict"
 
 
 @dataclass

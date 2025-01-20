@@ -1,6 +1,6 @@
 import dspy
-from ai_pi.core.lm_pipeline import ProcessingStep, BaseProcessor, ProcessingPipeline, PipelineConfig
-from ai_pi.core.lm_config import LMForTask
+from dspy_workflow_builder.lm_pipeline import ProcessingStep, BaseProcessor, ProcessingPipeline, PipelineConfig
+from dspy_workflow_builder.lm_config import LMForTask
 
 
 class SectionProcessor(BaseProcessor):
@@ -12,7 +12,7 @@ class SectionProcessor(BaseProcessor):
         text = dspy.InputField(desc="Section text to summarize")
         summary = dspy.OutputField(desc="Focused summary containing main points, evidence, findings, and significance")
     
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         sections = data.get('sections', [])
         summaries = []
         
@@ -38,7 +38,7 @@ class RelationshipProcessor(BaseProcessor):
         summaries = dspy.InputField(desc="Section summaries to analyze")
         analysis = dspy.OutputField(desc="Analysis of logical flow, argument development, and key dependencies")
     
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
         formatted_summaries = "\n\n".join(section_summaries)
         
@@ -58,7 +58,7 @@ class DocumentProcessor(BaseProcessor):
         relationships = dspy.InputField(desc="Relationship analysis between sections")
         analysis = dspy.OutputField(desc="Comprehensive review-oriented summary")
     
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
         relationship_analysis = data.get('relationship_analysis', '')
         
@@ -80,7 +80,7 @@ class TopicProcessor(BaseProcessor):
         analysis = dspy.InputField(desc="Document analysis text to extract topic from")
         topic = dspy.OutputField(desc="Concise topic (10 words or less) capturing main document focus")
     
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         document_analysis = data.get('document_analysis', '')
         with dspy.context(lm=self.lm):
             result = self.predictors['Signature'](

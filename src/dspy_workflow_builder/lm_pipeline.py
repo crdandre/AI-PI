@@ -4,14 +4,15 @@ This module provides the base classes and utilities for creating modular,
 configurable pipelines for any LLM-based processing task.
 """
 
-from typing import List, Type, Dict, Any, Optional, Union, Literal
 from dataclasses import dataclass, field
 from enum import Enum
-import dspy
-import logging
-from ai_pi.core.lm_config import LMForTask, PredictorType, TaskConfig
-from ai_pi.core.utils.logging import log_step
 from inspect import isclass
+import logging
+from typing import List, Type, Dict, Any, Optional, Union
+
+import dspy
+from dspy_workflow_builder.lm_config import LMForTask, PredictorType, TaskConfig
+from dspy_workflow_builder.utils.logging import log_step
 
 @dataclass
 class ProcessingStep:
@@ -31,7 +32,7 @@ class ProcessingStep:
     lm_name: LMForTask
     processor_class: Type["BaseProcessor"]
     output_key: str
-    task_config: Optional[TaskConfig] = None  # Replace predictor_type with full task config override
+    task_config: Optional[TaskConfig] = None
     depends_on: List[str] = field(default_factory=list)
     signatures: Optional[List[Type[dspy.Signature]]] = None
     config: Dict[str, Any] = field(default_factory=dict)
@@ -66,19 +67,23 @@ class BaseProcessor(dspy.Module):
     the process() method with its specific logic.
     """
     def __init__(self, step: ProcessingStep):
-        super().__init__()  # Initialize dspy.Module
+        super().__init__()
         self.step = step
-        # Use task_config override if provided, otherwise use default for the task
-        self.lm = step.lm_name.get_lm(step.task_config)
-        self.logger = logging.getLogger(f"processor.{step.lm_name.value}")
+        self.logger = logging.getLogger(f"processor.{step.step_type}")
         
-        # Get predictor type from task config
-        predictor_type = step.lm_name.get_predictor_type(step.task_config)
-        predictor_class = dspy.ChainOfThought if predictor_type == PredictorType.CHAIN_OF_THOUGHT else dspy.Predict
-        self.predictors = {
-            sig.__name__: predictor_class(sig)
-            for sig in step.signatures
-        }
+        # Only set up LM if specified
+        if step.lm_name:
+            self.lm = step.lm_name.get_lm(step.task_config)
+            predictor_type = step.lm_name.get_predictor_type(step.task_config)
+            try:
+                predictor_class = getattr(dspy, predictor_type.value)
+            except AttributeError:
+                raise ValueError(f"Invalid predictor type: {predictor_type.value}")
+            
+            self.predictors = {
+                sig.__name__: predictor_class(sig)
+                for sig in step.signatures
+            }
 
     @log_step()
     def process(self, data: dict) -> dict:
@@ -89,29 +94,32 @@ class BaseProcessor(dspy.Module):
             dict: Processing results
         Raises:
             NotImplementedError: Must be implemented by subclasses
+            ValueError: If required dependencies are missing
+        """
+        self._validate_dependencies(data)
+        return self._process(data)
+
+    def validate_output(self, output: dict) -> bool:
+        """
+        Override this for specific validation
+        """
+        return True
+    
+    def _process(self, data: dict) -> dict:
+        """
+        Override with process step logic
         """
         raise NotImplementedError()
 
-    def get_dependencies(self, data: dict) -> Dict[str, Any]:
-        """Retrieve required data from previous steps.
-        Args:
-            data: Input data containing all pipeline results 
-        Returns:
-            dict: Data required by this step from previous steps
-        """
-        return {
-            dep: data.get(dep, {})
-            for dep in self.step.depends_on
-        }
+    def _validate_dependencies(self, data: dict) -> None:
+        """Validate that declared dependencies exist in data"""
+        if not self.step.depends_on:
+            return
+            
+        missing = [dep for dep in self.step.depends_on if dep not in data]
+        if missing:
+            raise ValueError(f"{self.__class__.__name__} missing required dependencies: {missing}")
 
-    def validate_output(self, output: dict) -> bool:
-        """Validate the step's output.
-        Args:
-            output: Step processing results
-        Returns:
-            bool: True if output is valid, False otherwise
-        """
-        return True  # Override for specific validation
 
 class ProcessingPipeline(dspy.Module):
     """Pipeline for executing a series of LLM processing steps.
