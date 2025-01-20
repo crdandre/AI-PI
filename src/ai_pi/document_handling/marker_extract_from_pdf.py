@@ -20,7 +20,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 
-from ai_pi.lm_config import get_lm_for_task
+from ai_pi.core.lm_config import get_lm_for_task
 from ai_pi.utils.logging import setup_logging
 
 load_dotenv()

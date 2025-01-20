@@ -5,7 +5,7 @@ import re
 from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
 
-from ai_pi.lm_config import get_lm_for_task, LMConfig
+from ai_pi.core.lm_config import get_lm_for_task, LMConfig
 from ai_pi.utils.text_utils import normalize_unicode
 from ai_pi.utils.logging import setup_logging
 

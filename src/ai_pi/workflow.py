@@ -5,14 +5,14 @@ from pathlib import Path
 import dspy
 import json
 import copy
-from ai_pi.lm_config import DEFAULT_CONFIGS
+from ai_pi.core.lm_config import DEFAULT_CONFIGS
 
 from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer
 from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
 from ai_pi.document_handling.document_ingestion import extract_document_history
-from ai_pi.utils.logging import setup_logging
+from ai_pi.core.utils.logging import setup_logging
 
 
 class PaperReview:

@@ -1,9 +1,9 @@
-from typing import List, Type, Dict, Any, Optional
-from dataclasses import dataclass, field
-import dspy
 from enum import Enum
-
+import json
+from typing import List, Dict, Optional
+import dspy
 from ai_pi.core.lm_pipeline import ProcessingStep, ProcessingPipeline, PipelineConfig, BaseProcessor
+from ai_pi.core.lm_config import LMForTask
 
 class ReviewStepType(Enum):
     """Types of review steps available"""
@@ -12,10 +12,10 @@ class ReviewStepType(Enum):
     SECTION_REVIEW = "section_review"
     REVIEW_ITEMS = "review_items"
 
-    
+
 class FullDocumentReviewProcessor(BaseProcessor):
     class Signature(dspy.Signature):
-        """(You're a freaking genius scientist who is driven by creating insightful publications)
+        """(You're a freaking genius scientist whose ego rests on ability to create insightful publications)
         Review the entire document and assess it's pros and cons. Think beyond the paper, about
         the way it addresses it's topic and whether that is best, whether the paper is well-positioned
         in it's field given current progress, whether the narrative flow is coherent, etc."""
@@ -50,6 +50,7 @@ class FullDocumentReviewProcessor(BaseProcessor):
         )
         
         return {
+            **data,
             'overall_assessment': result.overall_assessment,
             'key_strengths': result.key_strengths,
             'key_weaknesses': result.key_weaknesses,
@@ -63,7 +64,7 @@ class FullDocumentReviewProcessor(BaseProcessor):
 
 class ReviewItemsProcessor(BaseProcessor):
     class Signature(dspy.Signature):
-        """(You're a freaking genius scientist who is driven by creating insightful publications)
+        """(You're a freaking genius scientist whose ego rests on ability to create insightful publications)
         Generate a list of relevant review items to address for the writer. These
         items should exist downstream of the broader review of the paper as concrete steps
         to realize the improvements suggested. Ensure the broader review's context is
@@ -71,13 +72,13 @@ class ReviewItemsProcessor(BaseProcessor):
         section_text = dspy.InputField(desc="The text content being reviewed")
         section_type = dspy.InputField(desc="The type of section")
         context = dspy.InputField(desc="Additional context about the paper")
-        reason = dspy.OutputField(desc="The thought pattern and origin of the suggestion.")
         review_items = dspy.OutputField(
             desc="""List of review items. Each item contains these fields:
             - match_string: The exact text from the paper that needs revision
             - comment: The review comment explaining what should be changed
             - revision: The suggested revised text
             - section_type: the section in which the item was found
+            - reason: The thought pattern or rationale behind this specific suggestion
             
             The comment and revision fields are each optional but at least
             one of them must be present (no need for both everytime).
@@ -88,12 +89,46 @@ class ReviewItemsProcessor(BaseProcessor):
         )
 
     def process(self, data: dict) -> dict:
-        raise NotImplementedError()
+        """Process the input data to generate review items"""
+        if not self.step.signatures:
+            raise ValueError("No signatures configured for ReviewItemsProcessor")
+        
+        dependencies = self.get_dependencies(data)
+        all_review_items = []
+        
+        for signature in self.step.signatures:
+            predictor = self.predictors[signature.__name__]
+            section_text = data.get('section_text', '')
+            section_type = data.get('section_type', '')
+
+            result = predictor(
+                section_text=section_text,
+                section_type=section_type,
+                context=dependencies
+            )
+            
+            review_items = result.review_items
+            if isinstance(review_items, str):
+                if '```json' in review_items:
+                    json_str = review_items.split('```json\n')[1].split('\n```')[0]
+                    review_items = json.loads(json_str)
+            
+            # Ensure section_type is set for each review item
+            if isinstance(review_items, list):
+                for item in review_items:
+                    if isinstance(item, dict):
+                        item['section_type'] = section_type
+                all_review_items.extend(review_items)
+        
+        return {
+            **data,
+            'review_items': all_review_items
+        }
     
     def validate_output(self, output: dict) -> bool:
         """Validate review items structure is present and contains required fields"""
         if 'review_items' in output:
-            required_fields = {'match_string', 'comment', 'revision', 'section_type'}
+            required_fields = {'match_string', 'comment', 'revision', 'section_type', 'reason'}
             return all(
                 isinstance(item, dict) and 
                 all(field in item for field in required_fields)
@@ -108,7 +143,7 @@ def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> Proc
     default_steps = [
         ProcessingStep(
             step_type=ReviewStepType.FULL_DOCUMENT_REVIEW,
-            lm_name="document_review",
+            lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=FullDocumentReviewProcessor,
             predictor_type="chain_of_thought",
             depends_on=["hierarchical_summary"],
@@ -116,8 +151,11 @@ def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> Proc
         ),
         ProcessingStep(
             step_type=ReviewStepType.REVIEW_ITEMS,
-            lm_name="review_items",
-            processor_class=ReviewItemsProcessor
+            lm_name=LMForTask.DOCUMENT_REVIEW,
+            processor_class=ReviewItemsProcessor,
+            predictor_type="chain_of_thought",
+            depends_on=["full_document_review"],
+            output_key="review_items",
         ),
     ]
     
@@ -152,6 +190,5 @@ if __name__ == "__main__":
     results = pipeline.execute(data)
     
     # Print results in a readable JSON format
-    import json
     print("\nPipeline Results:")
-    print(json.dumps(results, indent=2))
+    print(json.dumps(results['review_items'], indent=2))

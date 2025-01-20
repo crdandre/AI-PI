@@ -10,7 +10,7 @@ Requirements:
 import dspy
 import json
 import logging
-from ..lm_config import get_lm_for_task
+from ..core.lm_config import get_lm_for_task
 from dataclasses import dataclass
 import os
 from ai_pi.utils.logging import setup_logging

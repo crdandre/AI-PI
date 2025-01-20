@@ -4,14 +4,12 @@ This module provides the base classes and utilities for creating modular,
 configurable pipelines for any LLM-based processing task.
 """
 
-from typing import List, Type, Dict, Any, Optional, Union, Literal
+from typing import List, Type, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import dspy
 import logging
-from ai_pi.core.lm_config import LMForTask, PredictorType, TaskConfig
-from ai_pi.core.utils.logging import log_step
-from inspect import isclass
+from .lm_config import get_lm_for_task
 
 @dataclass
 class ProcessingStep:
@@ -19,32 +17,20 @@ class ProcessingStep:
     
     Attributes:
         step_type: Identifier for the type of processing (usually from an Enum)
-        lm_name: Task-specific language model configuration
-        processor_class: Class that implements the processing
-        output_key: Key under which to store this step's output
-        task_config: Optional override for the task's default configuration
-        depends_on: List of step names whose outputs this step requires
+        name: Unique name for this step instance
+        lm_name: Name of the language model configuration to use
         signatures: List of DSPy signatures defining the LLM interaction
+        depends_on: List of step names whose outputs this step requires
+        output_key: Key under which to store this step's output
         config: Additional configuration parameters specific to this step
     """
     step_type: Union[str, Enum]
-    lm_name: LMForTask
-    processor_class: Type["BaseProcessor"]
-    output_key: str
-    task_config: Optional[TaskConfig] = None  # Replace predictor_type with full task config override
+    name: str
+    lm_name: str
+    signatures: List[Type[dspy.Signature]]
     depends_on: List[str] = field(default_factory=list)
-    signatures: Optional[List[Type[dspy.Signature]]] = None
+    output_key: str = field(default="")
     config: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self):
-        """Use provided signatures or auto-discover from processor class"""
-        if self.signatures is None:
-            self.signatures = [
-                member for _, member in vars(self.processor_class).items()
-                if isclass(member) and issubclass(member, dspy.Signature) and member != dspy.Signature
-            ]
-        if not self.signatures:
-            raise ValueError(f"No Signature classes found for {self.processor_class.__name__}")
 
 @dataclass
 class PipelineConfig:
@@ -59,28 +45,21 @@ class PipelineConfig:
     verbose: bool = False
     validation: bool = True
 
-class BaseProcessor(dspy.Module):
+class BaseProcessor:
     """Base class for implementing LLM processing steps.
     
     Each specific processor should inherit from this class and implement
     the process() method with its specific logic.
     """
     def __init__(self, step: ProcessingStep):
-        super().__init__()  # Initialize dspy.Module
         self.step = step
-        # Use task_config override if provided, otherwise use default for the task
-        self.lm = step.lm_name.get_lm(step.task_config)
-        self.logger = logging.getLogger(f"processor.{step.lm_name.value}")
-        
-        # Get predictor type from task config
-        predictor_type = step.lm_name.get_predictor_type(step.task_config)
-        predictor_class = dspy.ChainOfThought if predictor_type == PredictorType.CHAIN_OF_THOUGHT else dspy.Predict
+        self.lm = get_lm_for_task(step.lm_name)
+        self.logger = logging.getLogger(f"processor.{step.name}")
         self.predictors = {
-            sig.__name__: predictor_class(sig)
+            sig.__name__: dspy.ChainOfThought(sig)
             for sig in step.signatures
         }
 
-    @log_step()
     def process(self, data: dict) -> dict:
         """Process the input data and return results.
         Args:
@@ -113,21 +92,15 @@ class BaseProcessor(dspy.Module):
         """
         return True  # Override for specific validation
 
-class ProcessingPipeline(dspy.Module):
+class ProcessingPipeline:
     """Pipeline for executing a series of LLM processing steps.
     Manages the flow of data through multiple processing steps, handling
     dependencies and storing results.
     """
     def __init__(self, config: PipelineConfig):
-        super().__init__()
         self.config = config
         self.processors: Dict[Union[str, Enum], Type[BaseProcessor]] = {}
         self.logger = logging.getLogger("pipeline")
-        
-        # Auto-register processors from steps
-        for step in config.steps:
-            step_type = step.step_type.value if isinstance(step.step_type, Enum) else step.step_type
-            self.register_processor(step_type, step.processor_class)
 
     def register_processor(self, 
                          step_type: Union[str, Enum], 
@@ -151,7 +124,7 @@ class ProcessingPipeline(dspy.Module):
         """
         for step in self.config.steps:
             if self.config.verbose:
-                self.logger.info(f"Executing step: {step.lm_name.value}")
+                self.logger.info(f"Executing step: {step.name}")
 
             if step.step_type not in self.processors:
                 raise ValueError(f"No processor registered for step type: {step.step_type}")
@@ -163,7 +136,7 @@ class ProcessingPipeline(dspy.Module):
                     result = processor.process(data)
 
                 if self.config.validation and not processor.validate_output(result):
-                    raise ValidationError(f"Output validation failed for step: {step.lm_name.value}")
+                    raise ValidationError(f"Output validation failed for step: {step.name}")
 
                 if step.output_key:
                     data[step.output_key] = result
@@ -171,10 +144,10 @@ class ProcessingPipeline(dspy.Module):
                     data.update(result)
                     
                 if self.config.verbose:
-                    self.logger.info(f"Completed step: {step.lm_name.value}")
+                    self.logger.info(f"Completed step: {step.name}")
 
             except Exception as e:
-                self.logger.error(f"Error in step {step.lm_name.value}: {str(e)}")
+                self.logger.error(f"Error in step {step.name}: {str(e)}")
                 raise
 
         return data
@@ -183,3 +156,32 @@ class ProcessingPipeline(dspy.Module):
 class ValidationError(Exception):
     """Raised when step output validation fails."""
     pass
+
+# Example base class for specific domains
+class DomainProcessor(BaseProcessor):
+    """Base class for domain-specific processors.
+    
+    Provides common functionality for a specific processing domain.
+    Inherit from this to create processors for your domain.
+    """
+    def __init__(self, step: ProcessingStep):
+        super().__init__(step)
+        self.domain_config = step.config.get("domain_specific", {})
+
+    def preprocess(self, data: dict) -> dict:
+        """Prepare data for processing."""
+        return data
+
+    def postprocess(self, result: dict) -> dict:
+        """Clean up and format processing results."""
+        return result
+
+    def process(self, data: dict) -> dict:
+        """Template method for domain processing."""
+        preprocessed = self.preprocess(data)
+        result = self.process_domain_specific(preprocessed)
+        return self.postprocess(result)
+
+    def process_domain_specific(self, data: dict) -> dict:
+        """Implement domain-specific processing logic."""
+        raise NotImplementedError() 

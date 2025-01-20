@@ -10,7 +10,7 @@ import os
 import logging
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
 from knowledge_storm.rm import SerperRM
-from ai_pi.lm_config import get_lm_for_task
+from ai_pi.core.lm_config import get_lm_for_task
 from ai_pi.utils.logging import setup_logging
 
 class StormContextGenerator:
