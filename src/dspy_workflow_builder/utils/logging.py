@@ -6,7 +6,7 @@ import time
 
 def log_step(logger_name: str = None):
     """
-    Decorator to log the start and end of processing steps, including LLM info.
+    Decorator to log the start and end of processing steps, including LLM info if available.
     
     Args:
         logger_name: Optional name for the logger. If None, uses the class name
@@ -21,9 +21,11 @@ def log_step(logger_name: str = None):
             _logger_name = logger_name or args[0].__class__.__name__
             logger = logging.getLogger(_logger_name)
             
-            # Get LLM info from step configuration
+            # Get LLM info from step configuration if it's an LMStep
             processor = args[0]
-            llm_info = f" using {processor.step.lm_name}"
+            llm_info = ""
+            if hasattr(processor.step, 'lm_name'):
+                llm_info = f" using {processor.step.lm_name}"
             
             # Log start
             logger.info(f"Starting step: {func.__name__}{llm_info}")

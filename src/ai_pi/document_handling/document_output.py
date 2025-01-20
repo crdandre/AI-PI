@@ -7,7 +7,6 @@ this output.
 """
 import docx
 from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from fuzzywuzzy import fuzz
 import json
 

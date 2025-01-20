@@ -2,8 +2,10 @@ from enum import Enum
 import json
 from typing import List, Dict, Optional
 import dspy
-from ai_pi.core.lm_pipeline import ProcessingStep, ProcessingPipeline, PipelineConfig, BaseProcessor
-from ai_pi.core.lm_config import LMForTask
+from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
+from dspy_workflow_builder.processors import LMProcessor as BaseProcessor
+from dspy_workflow_builder.steps import LMStep as ProcessingStep
+from dspy_workflow_builder.lm_config import LMForTask
 
 class ReviewStepType(Enum):
     """Types of review steps available"""
@@ -138,9 +140,9 @@ class ReviewItemsProcessor(BaseProcessor):
             raise ValueError("Required field 'review_items' not found in output")
 
 
-def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> ProcessingPipeline:
-    """Create pipeline with default or custom steps"""
-    default_steps = [
+def create_reviewer_pipeline(verbose: bool = False) -> Pipeline:
+    """Create pipeline with review steps"""
+    steps = [
         ProcessingStep(
             step_type=ReviewStepType.FULL_DOCUMENT_REVIEW,
             lm_name=LMForTask.DOCUMENT_REVIEW,
@@ -158,9 +160,36 @@ def create_pipeline(custom_steps: Optional[List[ProcessingStep]] = None) -> Proc
             output_key="review_items",
         ),
     ]
-    
-    steps = custom_steps if custom_steps is not None else default_steps
-    return ProcessingPipeline(PipelineConfig(steps=steps, verbose=True))
+    return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
+
+
+class Reviewer:
+    """Creates a comprehensive review of an input document"""
+    def __init__(self, verbose: bool = False):
+        self.pipeline = create_reviewer_pipeline(verbose)
+
+    def review_document(self, document_json: dict, topic_context: dict, hierarchical_summary: dict) -> dict:
+        """
+        Review the document using the pipeline, incorporating topic context
+        and hierarchical summary information.
+        """
+        input_data = {
+            'full_text': document_json.get('full_text', ''),
+            'sections': document_json.get('sections', []),
+            'hierarchical_summary': hierarchical_summary,
+            'research_problem': hierarchical_summary.get('topic', ''),
+            'topic_context': topic_context,
+            'criteria': {'quality': 'high'}  # Can be expanded based on needs
+        }
+        
+        results = self.pipeline.execute(input_data)
+        
+        return {
+            'reviews': {
+                'full_document_review': results['full_document_review'],
+                'review_items': results['review_items']
+            }
+        }
 
 
 if __name__ == "__main__":
@@ -175,7 +204,7 @@ if __name__ == "__main__":
     console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
     logger.addHandler(console_handler)
 
-    pipeline = create_pipeline()
+    pipeline = create_reviewer_pipeline()
     
     # Example input data with some content
     data = {

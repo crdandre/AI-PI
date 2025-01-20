@@ -1,10 +1,12 @@
 import dspy
-from dspy_workflow_builder.lm_pipeline import ProcessingStep, BaseProcessor, ProcessingPipeline, PipelineConfig
+from dspy_workflow_builder.steps import LMStep
+from dspy_workflow_builder.processors import BaseProcessor, LMProcessor
+from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
 from dspy_workflow_builder.lm_config import LMForTask
 
 
-class SectionProcessor(BaseProcessor):
-    """Processes individual document sections"""
+class SectionProcessor(LMProcessor):
+    """LLM-based section processing"""
     
     class Signature(dspy.Signature):
         """Signature for section summarization"""
@@ -89,46 +91,47 @@ class TopicProcessor(BaseProcessor):
         return {'topic': result.topic.strip()}
 
 
+def create_summarizer_pipeline(verbose: bool = False) -> Pipeline:
+    steps = [
+        LMStep(
+            step_type="section",
+            lm_name=LMForTask.SUMMARIZATION,
+            processor_class=SectionProcessor,
+            output_key="section_summaries",
+            depends_on=["document_structure"]
+        ),
+        LMStep(
+            step_type="relationship",
+            lm_name=LMForTask.SUMMARIZATION,
+            processor_class=RelationshipProcessor,
+            output_key="relationship_analysis",
+            depends_on=["section_summaries"]
+        ),
+        LMStep(
+            step_type="document",
+            lm_name=LMForTask.SUMMARIZATION,
+            processor_class=DocumentProcessor,
+            output_key="document_analysis",
+            depends_on=["section_summaries", "relationship_analysis"]
+        ),
+        LMStep(
+            step_type="topic",
+            lm_name=LMForTask.SUMMARIZATION,
+            processor_class=TopicProcessor,
+            output_key="topic",
+            depends_on=["document_analysis"]
+        )
+    ]
+    return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
+
+
 class Summarizer:
     """
     Creates a hierarchical summary of an input document. The input is
     a structured json file with full section text separated by key.
     """
     def __init__(self, verbose: bool = False):
-        steps = [
-            ProcessingStep(
-                step_type="section",
-                lm_name=LMForTask.SUMMARIZATION,
-                processor_class=SectionProcessor,
-                output_key="section_summaries",
-                depends_on=[]
-            ),
-            ProcessingStep(
-                step_type="relationship",
-                lm_name=LMForTask.SUMMARIZATION,
-                processor_class=RelationshipProcessor,
-                output_key="relationship_analysis",
-                depends_on=["section_summaries"]
-            ),
-            ProcessingStep(
-                step_type="document",
-                lm_name=LMForTask.SUMMARIZATION,
-                processor_class=DocumentProcessor,
-                output_key="document_analysis",
-                depends_on=["section_summaries", "relationship_analysis"]
-            ),
-            ProcessingStep(
-                step_type="topic",
-                lm_name=LMForTask.SUMMARIZATION,
-                processor_class=TopicProcessor,
-                output_key="topic",
-                depends_on=["document_analysis"]
-            )
-        ]
-        
-        self.pipeline = ProcessingPipeline(
-            PipelineConfig(steps=steps, verbose=verbose)
-        )
+        self.pipeline = create_summarizer_pipeline(verbose)
 
     def analyze_sectioned_document(self, document_json: dict) -> dict:
         """

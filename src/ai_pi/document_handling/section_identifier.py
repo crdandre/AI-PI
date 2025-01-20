@@ -5,9 +5,9 @@ import re
 from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
 
-from ai_pi.core.lm_config import get_lm_for_task, LMConfig
-from ai_pi.utils.text_utils import normalize_unicode
-from ai_pi.utils.logging import setup_logging
+from dspy_workflow_builder.lm_config import LMConfig, LMForTask, TaskConfig
+from dspy_workflow_builder.utils.text_utils import normalize_unicode
+from dspy_workflow_builder.utils.logging import setup_logging
 
 class HeadingInfo(dspy.Signature):
     """Structured output for a single heading"""
@@ -105,12 +105,17 @@ class SingleContextSectionIdentifier:
     2. Extract main sections with their boundary strings
     """
     
-    def __init__(self, lm: Union[LMConfig, dspy.LM] = None, 
+    def __init__(self, lm: Union[LMConfig, dspy.LM, TaskConfig] = None, 
                  custom_sections: Dict[str, List[str]] = None):
-        self.lm = get_lm_for_task("section_identification") if lm is None else lm
+        # Use section_review task configuration by default
+        self.lm = LMForTask.SECTION_IDENTIFICATION.get_lm() if lm is None else (
+            lm.create_lm() if isinstance(lm, (LMConfig, TaskConfig)) else lm
+        )
         self.section_types = SectionTypes(custom_sections)
-        self.structure_predictor = dspy.ChainOfThought(DocumentStructure)
-        self.boundary_predictor = dspy.ChainOfThought(ExtractSectionBoundaries)
+        # Use predictor type from task config
+        predictor_type = LMForTask.SECTION_IDENTIFICATION.get_predictor_type()
+        self.structure_predictor = getattr(dspy, predictor_type.value)(DocumentStructure)
+        self.boundary_predictor = getattr(dspy, predictor_type.value)(ExtractSectionBoundaries)
         self.logger = logging.getLogger('section_identifier')
 
     def _identify_document_structure(self, text: str) -> List[Dict]:

@@ -3,22 +3,22 @@ from pathlib import Path
 from datetime import datetime
 import json
 import copy
-from typing import Optional, List
 
-from ai_pi.core.lm_pipeline import ProcessingStep, ProcessingPipeline, PipelineConfig, BaseProcessor
-from ai_pi.core.lm_config import LMForTask, DEFAULT_CONFIGS
+from dspy_workflow_builder.lm_config import DEFAULT_CONFIGS
+from dspy_workflow_builder.processors import BaseProcessor
+from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
+from dspy_workflow_builder.steps import BaseStep
+from dspy_workflow_builder.utils.logging import setup_logging
+
 from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer
 from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
 from ai_pi.document_handling.document_ingestion import extract_document_history
-from ai_pi.core.utils.logging import setup_logging
-
 
 class WorkflowStepType(Enum):
     """Types of workflow steps available"""
     DOCUMENT_EXTRACTION = "document_extraction"
-    CONFIG_STATE = "config_state"
     DOCUMENT_ANALYSIS = "document_analysis"
     TOPIC_CONTEXT = "topic_context"
     DOCUMENT_REVIEW = "document_review"
@@ -36,47 +36,45 @@ class DocumentExtractionProcessor(BaseProcessor):
         if not document_history or not isinstance(document_history, dict):
             raise ValueError("Document extraction failed or invalid format")
             
+        # Check if document_history is nested and unwrap it
+        if 'document_history' in document_history:
+            document_history = document_history['document_history']
+            
         required_keys = ['sections', 'comments', 'revisions', 'metadata']
         if not all(key in document_history for key in required_keys):
-            raise ValueError(f"Missing required keys in document_history")
+            raise ValueError(f"Missing required keys in document_history: {required_keys}")
             
-        return {'document_history': document_history}
-
-
-class ConfigStateProcessor(BaseProcessor):
-    """Handles LM configuration state management"""
-    def _process(self, data: dict) -> dict:
-        lm_config_state = {
-            "timestamp": data['timestamp'],
-            "configs": {
-                task: {
-                    "model_name": config.model_name,
-                    "temperature": config.temperature,
-                    "api_base": config.api_base,
-                    "max_tokens": config.max_tokens
-                } for task, config in copy.deepcopy(DEFAULT_CONFIGS).items()
-            }
-        }
-        
-        config_json = data['output_dir'] / "lm_config_state.json"
-        with open(config_json, 'w', encoding='utf-8') as f:
-            json.dump(lm_config_state, f, indent=4)
-            
-        return {'config_path': str(config_json)}
+        # Return the unwrapped document_history
+        return document_history
 
 
 class DocumentAnalysisProcessor(BaseProcessor):
-    """Handles document analysis using Summarizer"""
+    """Orchestrates document analysis using Summarizer"""
     def _process(self, data: dict) -> dict:
-        summarizer = Summarizer(
-            verbose=self.step.verbose,
-            lm_config=self.step.task_config
-        )
-        
-        topic, document_structure = summarizer.analyze_sectioned_document(
-            data['document_history']
-        )
-        
+        # Add validation for document_history
+        if 'document_history' not in data:
+            raise ValueError(f"Missing document_history in input data. Available keys: {list(data.keys())}")
+            
+        document_history = data['document_history']
+        if not isinstance(document_history, dict):
+            raise ValueError(f"document_history must be a dict, got {type(document_history)}")
+            
+        # Log the keys present in document_history for debugging
+        self.logger.debug(f"Document history keys: {list(document_history.keys())}")
+            
+        if 'sections' not in document_history:
+            raise ValueError(f"Missing required key 'sections' in document_history. Available keys: {list(document_history.keys())}")
+            
+        summarizer = Summarizer(verbose=self.step.verbose)
+        try:
+            topic, document_structure = summarizer.analyze_sectioned_document(
+                document_history
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to analyze document: {str(e)}")
+            self.logger.error(f"Document history content: {document_history}")
+            raise
+            
         return {
             'topic': topic,
             'document_structure': document_structure,
@@ -85,7 +83,7 @@ class DocumentAnalysisProcessor(BaseProcessor):
 
 
 class TopicContextProcessor(BaseProcessor):
-    """Generates topic context using STORM"""
+    """Orchestrates topic context generation using STORM"""
     def _process(self, data: dict) -> dict:
         context_generator = StormContextGenerator(
             output_dir=data['output_dir']
@@ -95,15 +93,13 @@ class TopicContextProcessor(BaseProcessor):
 
 
 class DocumentReviewProcessor(BaseProcessor):
-    """Handles document review using Reviewer"""
+    """Orchestrates document review using Reviewer"""
     def _process(self, data: dict) -> dict:
-        reviewer = Reviewer(
-            verbose=self.step.verbose,
-            lm_config=self.step.task_config
-        )
+        reviewer = Reviewer(verbose=self.step.verbose)
         reviewed_document = reviewer.review_document(
             data['document_history'],
-            data['topic_context']
+            data['topic_context'],
+            data['hierarchical_summary']
         )
         return {'reviewed_document': reviewed_document}
 
@@ -118,6 +114,22 @@ class OutputProcessor(BaseProcessor):
         output_json = output_dir / f"{paper_title}_reviewed.json"
         with open(output_json, 'w', encoding='utf-8') as f:
             json.dump(data['reviewed_document'], f, indent=4)
+            
+        # Save LM configuration state
+        lm_config_state = {
+            "timestamp": data['timestamp'],
+            "configs": {
+                task: {
+                    "model_name": config.model_name,
+                    "temperature": config.temperature,
+                    "api_base": config.api_base,
+                    "max_tokens": config.max_tokens
+                } for task, config in copy.deepcopy(DEFAULT_CONFIGS).items()
+            }
+        }
+        config_json = output_dir / "lm_config_state.json"
+        with open(config_json, 'w', encoding='utf-8') as f:
+            json.dump(lm_config_state, f, indent=4)
             
         # Generate output document
         output_path = output_dir / f"{paper_title}_reviewed.docx"
@@ -134,64 +146,45 @@ class OutputProcessor(BaseProcessor):
                 'docx': str(output_path),
                 'pdf': str(output_dir / f"{paper_title}.pdf"),
                 'markdown': str(output_dir / f"{paper_title}.md"),
-                'lm_config': data['config_path']
+                'lm_config': str(config_json)
             }
         }
 
 
-def create_pipeline(verbose: bool = False) -> ProcessingPipeline:
+def create_pipeline(verbose: bool = False) -> Pipeline:
     """Create the document processing pipeline"""
     steps = [
-        ProcessingStep(
+        BaseStep(
             step_type=WorkflowStepType.DOCUMENT_EXTRACTION,
-            lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=DocumentExtractionProcessor,
-            output_key="document_history",
-            depends_on=[],
-            verbose=verbose
+            output_key="document_history"
         ),
-        ProcessingStep(
-            step_type=WorkflowStepType.CONFIG_STATE,
-            lm_name=LMForTask.DOCUMENT_REVIEW,
-            processor_class=ConfigStateProcessor,
-            output_key="config_path",
-            depends_on=[],
-            verbose=verbose
-        ),
-        ProcessingStep(
+        BaseStep(
             step_type=WorkflowStepType.DOCUMENT_ANALYSIS,
-            lm_name=None,
             processor_class=DocumentAnalysisProcessor,
             output_key="document_structure",
-            depends_on=["document_history"],
-            verbose=verbose
+            depends_on=["document_history"]
         ),
-        ProcessingStep(
+        BaseStep(
             step_type=WorkflowStepType.TOPIC_CONTEXT,
-            lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=TopicContextProcessor,
             output_key="topic_context",
-            depends_on=["topic"],
-            verbose=verbose
+            depends_on=["topic"]
         ),
-        ProcessingStep(
+        BaseStep(
             step_type=WorkflowStepType.DOCUMENT_REVIEW,
-            lm_name=None,
             processor_class=DocumentReviewProcessor,
             output_key="reviewed_document",
-            depends_on=["document_history", "topic_context", "hierarchical_summary"],
-            verbose=verbose
+            depends_on=["document_history", "topic_context", "hierarchical_summary"]
         ),
-        ProcessingStep(
+        BaseStep(
             step_type=WorkflowStepType.OUTPUT_GENERATION,
-            lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=OutputProcessor,
             output_key="output_paths",
-            depends_on=["reviewed_document", "config_path"],
-            verbose=verbose
+            depends_on=["reviewed_document"]
         )
     ]
-    return ProcessingPipeline(PipelineConfig(steps=steps, verbose=verbose))
+    return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
 
 
 class PaperReview:
@@ -202,11 +195,9 @@ class PaperReview:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
         
-        # Setup logging
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.logger = setup_logging(self.log_dir, timestamp, "paper_review")
         
-        # Create pipeline
         self.pipeline = create_pipeline(verbose=verbose)
 
     def review_paper(self, input_doc_path: str) -> dict:
@@ -214,14 +205,12 @@ class PaperReview:
         self.logger.info(f"Starting review of document: {input_doc_path}")
         
         try:
-            # Setup initial data
             paper_title = Path(input_doc_path).stem
             base_dir = Path('processed_documents').resolve()
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_dir = base_dir / f"{paper_title}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Execute pipeline with initial data
             results = self.pipeline.execute({
                 'input_doc_path': input_doc_path,
                 'paper_title': paper_title,
@@ -240,3 +229,18 @@ class PaperReview:
         except Exception as e:
             self.logger.error(f"Error processing document: {str(e)}")
             raise ValueError(f"Error processing document: {str(e)}")
+        
+        
+if __name__ == "__main__":
+    # Example usage
+    input_path = "examples/DistractionCompressionPSRS2024Abstract.docx"
+    
+    paper_review = PaperReview(verbose=True)
+    
+    try:
+        output = paper_review.review_paper(input_doc_path=input_path)
+        print(f"Successfully created reviewed document")
+    except Exception as e:
+        print(f"Error processing document: {str(e)}")
+        
+        

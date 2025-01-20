@@ -67,6 +67,7 @@ class Models:
 class LMForTask(Enum):
     SUMMARIZATION = "summarization"
     DOCUMENT_REVIEW = "document_review"
+    SECTION_IDENTIFICATION = "section_identification"
     SECTION_REVIEW = "section_review"
     IMAGE_CAPTION_EXTRACTION = "image_caption_extraction"
     CAPTION_ANALYSIS = "caption_analysis"
@@ -91,6 +92,10 @@ DEFAULT_CONFIGS: Dict[LMForTask, TaskConfig] = {
         predictor_type=PredictorType.CHAIN_OF_THOUGHT
     ),
     LMForTask.DOCUMENT_REVIEW: TaskConfig(
+        lm_config=Models.OpenRouter.DEEPSEEK_V3,
+        predictor_type=PredictorType.CHAIN_OF_THOUGHT
+    ),
+    LMForTask.SECTION_IDENTIFICATION: TaskConfig(
         lm_config=Models.OpenRouter.DEEPSEEK_V3,
         predictor_type=PredictorType.CHAIN_OF_THOUGHT
     ),
