@@ -10,8 +10,8 @@ import os
 import logging
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
 from knowledge_storm.rm import SerperRM
-from ai_pi.core.lm_config import get_lm_for_task
-from ai_pi.utils.logging import setup_logging
+from dspy_workflow_builder.lm_config import LMForTask
+from dspy_workflow_builder.utils.logging import setup_logging
 
 class StormContextGenerator:
     def __init__(self, 
@@ -45,9 +45,11 @@ class StormContextGenerator:
         self.logger.debug("Setting up LM configurations")
         self.lm_configs = STORMWikiLMConfigs()
         
-        question_lm = get_lm_for_task("storm_questions")
-        writer_lm = get_lm_for_task("storm_writer")
+        # Create LM instances for different tasks
+        question_lm = LMForTask.STORM_QUESTIONS.get_lm()
+        writer_lm = LMForTask.STORM_WRITER.get_lm()
         
+        # Set the LMs for different STORM components
         self.lm_configs.set_conv_simulator_lm(question_lm)
         self.lm_configs.set_question_asker_lm(question_lm)
         self.lm_configs.set_outline_gen_lm(writer_lm)
