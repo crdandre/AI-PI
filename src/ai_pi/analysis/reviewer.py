@@ -59,7 +59,7 @@ class FullDocumentReviewProcessor(BaseProcessor):
             'global_suggestions': result.global_suggestions
         }
 
-    def validate_output(self, output: dict) -> bool:
+    def _validate_output(self, output: dict) -> bool:
         """No specific validation needed for full document review"""
         return True
 
@@ -127,7 +127,7 @@ class ReviewItemsProcessor(BaseProcessor):
             'review_items': all_review_items
         }
     
-    def validate_output(self, output: dict) -> bool:
+    def _validate_output(self, output: dict) -> bool:
         """Validate review items structure is present and contains required fields"""
         if 'review_items' in output:
             required_fields = {'match_string', 'comment', 'revision', 'section_type', 'reason'}

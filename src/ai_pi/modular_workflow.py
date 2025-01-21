@@ -19,7 +19,7 @@ from ai_pi.document_handling.document_ingestion import extract_document_history
 class WorkflowStepType(Enum):
     """Types of workflow steps available"""
     DOCUMENT_EXTRACTION = "document_extraction"
-    DOCUMENT_ANALYSIS = "document_analysis"
+    DOCUMENT_SUMMARY = "document_summary"
     TOPIC_CONTEXT = "topic_context"
     DOCUMENT_REVIEW = "document_review"
     OUTPUT_GENERATION = "output_generation"
@@ -32,54 +32,41 @@ class DocumentExtractionProcessor(BaseProcessor):
             data['input_doc_path'], 
             write_to_file=False
         )
+
+        return {
+            **data,
+            self.step.output_key: document_history
+        }
         
-        if not document_history or not isinstance(document_history, dict):
-            raise ValueError("Document extraction failed or invalid format")
-            
-        # Check if document_history is nested and unwrap it
-        if 'document_history' in document_history:
-            document_history = document_history['document_history']
-            
-        required_keys = ['sections', 'comments', 'revisions', 'metadata']
-        if not all(key in document_history for key in required_keys):
-            raise ValueError(f"Missing required keys in document_history: {required_keys}")
-            
-        # Return the unwrapped document_history
-        return document_history
+    def _validate_output(self, result: dict) -> bool:
+        super()._validate_output(result)
+        output = result.get(self.step.output_key, {})
+        required_keys = {'sections', 'comments', 'revisions', 'metadata'}
+        return all(key in output for key in required_keys)
 
 
-class DocumentAnalysisProcessor(BaseProcessor):
+class DocumentSummaryProcessor(BaseProcessor):
     """Orchestrates document analysis using Summarizer"""
     def _process(self, data: dict) -> dict:
-        # Add validation for document_history
-        if 'document_history' not in data:
-            raise ValueError(f"Missing document_history in input data. Available keys: {list(data.keys())}")
-            
-        document_history = data['document_history']
-        if not isinstance(document_history, dict):
-            raise ValueError(f"document_history must be a dict, got {type(document_history)}")
-            
-        # Log the keys present in document_history for debugging
-        self.logger.debug(f"Document history keys: {list(document_history.keys())}")
-            
-        if 'sections' not in document_history:
-            raise ValueError(f"Missing required key 'sections' in document_history. Available keys: {list(document_history.keys())}")
-            
         summarizer = Summarizer(verbose=self.step.verbose)
-        try:
-            topic, document_structure = summarizer.analyze_sectioned_document(
-                document_history
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to analyze document: {str(e)}")
-            self.logger.error(f"Document history content: {document_history}")
-            raise
-            
+        topic, document_summary = summarizer.analyze_sectioned_document(data)
+
+        print("SUMMARY")
+        print(document_summary)
+        
         return {
-            'topic': topic,
-            'document_structure': document_structure,
-            'hierarchical_summary': document_structure['hierarchical_summary']
+            **data,
+            self.step.output_key: {
+                'topic': topic,
+                'hierarchical_summary': document_summary                
+            }
         }
+    
+    def _validate_output(self, result: dict) -> bool:
+        super()._validate_output(result)
+        output = result.get(self.step.output_key, {})
+        required_keys = {'topic', 'hierarchical_summary'}
+        return all(key in output for key in required_keys)
 
 
 class TopicContextProcessor(BaseProcessor):
@@ -89,7 +76,15 @@ class TopicContextProcessor(BaseProcessor):
             output_dir=data['output_dir']
         )
         topic_context = context_generator.generate_context(data['topic'])
-        return {'topic_context': topic_context}
+        
+        return {
+            **data,
+            self.step.output_key: topic_context
+        }
+        
+    def _validate_output(self, result: dict) -> bool:
+        super()._validate_output(result)
+        return(self.step.output_key in result)
 
 
 class DocumentReviewProcessor(BaseProcessor):
@@ -101,7 +96,15 @@ class DocumentReviewProcessor(BaseProcessor):
             data['topic_context'],
             data['hierarchical_summary']
         )
-        return {'reviewed_document': reviewed_document}
+        
+        return {
+            **data,
+            self.step.output_key: reviewed_document
+        }
+        
+    def _validate_output(self, result: dict) -> bool:
+        super()._validate_output(result)
+        #TODO: validate fields of review when finalized
 
 
 class OutputProcessor(BaseProcessor):
@@ -110,12 +113,10 @@ class OutputProcessor(BaseProcessor):
         paper_title = data['paper_title']
         output_dir = data['output_dir']
         
-        # Write reviewed document to JSON
         output_json = output_dir / f"{paper_title}_reviewed.json"
         with open(output_json, 'w', encoding='utf-8') as f:
             json.dump(data['reviewed_document'], f, indent=4)
             
-        # Save LM configuration state
         lm_config_state = {
             "timestamp": data['timestamp'],
             "configs": {
@@ -131,7 +132,6 @@ class OutputProcessor(BaseProcessor):
         with open(config_json, 'w', encoding='utf-8') as f:
             json.dump(lm_config_state, f, indent=4)
             
-        # Generate output document
         output_path = output_dir / f"{paper_title}_reviewed.docx"
         output_commented_document(
             input_doc_path=data['input_doc_path'],
@@ -160,9 +160,9 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             output_key="document_history"
         ),
         BaseStep(
-            step_type=WorkflowStepType.DOCUMENT_ANALYSIS,
-            processor_class=DocumentAnalysisProcessor,
-            output_key="document_structure",
+            step_type=WorkflowStepType.DOCUMENT_SUMMARY,
+            processor_class=DocumentSummaryProcessor,
+            output_key="document_summary",
             depends_on=["document_history"]
         ),
         BaseStep(
@@ -177,12 +177,12 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             output_key="reviewed_document",
             depends_on=["document_history", "topic_context", "hierarchical_summary"]
         ),
-        BaseStep(
-            step_type=WorkflowStepType.OUTPUT_GENERATION,
-            processor_class=OutputProcessor,
-            output_key="output_paths",
-            depends_on=["reviewed_document"]
-        )
+        # BaseStep(
+        #     step_type=WorkflowStepType.OUTPUT_GENERATION,
+        #     processor_class=OutputProcessor,
+        #     output_key="output_paths",
+        #     depends_on=["reviewed_document"]
+        # )
     ]
     return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
 

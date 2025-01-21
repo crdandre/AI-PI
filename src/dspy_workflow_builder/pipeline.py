@@ -60,9 +60,6 @@ class Pipeline(dspy.Module):
             try:
                 result = processor.process(data)
 
-                if self.config.validation and not processor.validate_output(result):
-                    raise ValidationError(f"Output validation failed for step: {step.step_type}")
-
                 if step.output_key:
                     data[step.output_key] = result
                 else:

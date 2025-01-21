@@ -17,12 +17,13 @@ class BaseProcessor:
     @log_step()
     def process(self, data: dict) -> dict:
         self._validate_dependencies(data)
-        return self._process(data)
+        result = self._process(data)
+        
+        if not self._validate_output(result):
+            raise ValueError(f"Output validation failed for step: {self.step.step_type}")
+            
+        return result
     
-    def validate_output(self, result: dict) -> bool:
-        """Validate processor output. Override in subclasses for specific validation."""
-        return True
-
     def _process(self, data: dict) -> dict:
         raise NotImplementedError()
         
@@ -34,6 +35,10 @@ class BaseProcessor:
         missing = [dep for dep in self.step.depends_on if dep not in data]
         if missing:
             raise ValueError(f"{self.__class__.__name__} missing required dependencies: {missing}")
+            
+    def _validate_output(self, result: dict) -> bool:
+        """Validate processor output. Override in subclasses for specific validation."""
+        return isinstance(result, dict) and bool(result)
 
 
 class LMProcessor(dspy.Module, BaseProcessor):

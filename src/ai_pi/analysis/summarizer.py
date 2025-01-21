@@ -15,7 +15,9 @@ class SectionProcessor(LMProcessor):
         summary = dspy.OutputField(desc="Focused summary containing main points, evidence, findings, and significance")
     
     def _process(self, data: dict) -> dict:
-        sections = data.get('sections', [])
+        # Get sections from document_history
+        document_history = data.get('document_history', {})
+        sections = document_history.get('sections', [])
         summaries = []
         
         for section in sections:
@@ -32,7 +34,7 @@ class SectionProcessor(LMProcessor):
         return {'section_summaries': summaries}
 
 
-class RelationshipProcessor(BaseProcessor):
+class RelationshipProcessor(LMProcessor):
     """Analyzes relationships between sections"""
     
     class Signature(dspy.Signature):
@@ -51,7 +53,7 @@ class RelationshipProcessor(BaseProcessor):
         return {'relationship_analysis': result.analysis}
 
 
-class DocumentProcessor(BaseProcessor):
+class DocumentProcessor(LMProcessor):
     """Creates document-level summary"""
     
     class Signature(dspy.Signature):
@@ -74,7 +76,7 @@ class DocumentProcessor(BaseProcessor):
         return {'document_analysis': result.analysis}
 
 
-class TopicProcessor(BaseProcessor):
+class TopicProcessor(LMProcessor):
     """Extracts document topic"""
     
     class Signature(dspy.Signature):
@@ -98,7 +100,7 @@ def create_summarizer_pipeline(verbose: bool = False) -> Pipeline:
             lm_name=LMForTask.SUMMARIZATION,
             processor_class=SectionProcessor,
             output_key="section_summaries",
-            depends_on=["document_structure"]
+            depends_on=["document_history"]
         ),
         LMStep(
             step_type="relationship",
@@ -138,7 +140,7 @@ class Summarizer:
         Create a true summary tree where each level summarizes its children,
         working with pre-sectioned content from document_json.
         """
-        results = self.pipeline.execute({'sections': document_json['sections']})
+        results = self.pipeline.execute(document_json)
         
         hierarchical_summary = {
             'topic': results['topic'],
