@@ -50,9 +50,6 @@ class DocumentSummaryProcessor(BaseProcessor):
     def _process(self, data: dict) -> dict:
         summarizer = Summarizer(verbose=self.step.verbose)
         topic, document_summary = summarizer.analyze_sectioned_document(data)
-
-        print("SUMMARY")
-        print(document_summary)
         
         return {
             **data,
@@ -165,18 +162,18 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             output_key="document_summary",
             depends_on=["document_history"]
         ),
-        BaseStep(
-            step_type=WorkflowStepType.TOPIC_CONTEXT,
-            processor_class=TopicContextProcessor,
-            output_key="topic_context",
-            depends_on=["topic"]
-        ),
-        BaseStep(
-            step_type=WorkflowStepType.DOCUMENT_REVIEW,
-            processor_class=DocumentReviewProcessor,
-            output_key="reviewed_document",
-            depends_on=["document_history", "topic_context", "hierarchical_summary"]
-        ),
+        # BaseStep(
+        #     step_type=WorkflowStepType.TOPIC_CONTEXT,
+        #     processor_class=TopicContextProcessor,
+        #     output_key="topic_context",
+        #     depends_on=["topic"]
+        # ),
+        # BaseStep(
+        #     step_type=WorkflowStepType.DOCUMENT_REVIEW,
+        #     processor_class=DocumentReviewProcessor,
+        #     output_key="reviewed_document",
+        #     depends_on=["document_history", "topic_context", "hierarchical_summary"]
+        # ),
         # BaseStep(
         #     step_type=WorkflowStepType.OUTPUT_GENERATION,
         #     processor_class=OutputProcessor,
@@ -204,6 +201,7 @@ class PaperReview:
         """Execute the document review pipeline"""
         self.logger.info(f"Starting review of document: {input_doc_path}")
         
+        #TODO: configify this
         try:
             paper_title = Path(input_doc_path).stem
             base_dir = Path('processed_documents').resolve()
@@ -218,13 +216,7 @@ class PaperReview:
                 'timestamp': timestamp
             })
             
-            return {
-                'paper_context': results['document_structure']['hierarchical_summary']['document_summary']['document_analysis'],
-                'document_structure': results['document_structure'],
-                'reviews': results['reviewed_document']['reviews'],
-                'output_dir': str(output_dir),
-                'output_files': results['output_paths']
-            }
+            return results
             
         except Exception as e:
             self.logger.error(f"Error processing document: {str(e)}")
@@ -234,12 +226,19 @@ class PaperReview:
 if __name__ == "__main__":
     # Example usage
     input_path = "examples/DistractionCompressionPSRS2024Abstract.docx"
+    output_json_path = "/home/christian/projects/agents/ai_pi/ref/sample.json"
     
     paper_review = PaperReview(verbose=True)
     
     try:
         output = paper_review.review_paper(input_doc_path=input_path)
         print(f"Successfully created reviewed document")
+        
+        # Save output to JSON file - output should already be serialized by processors
+        with open(output_json_path, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=4)
+        print(f"Output saved to: {output_json_path}")
+            
     except Exception as e:
         print(f"Error processing document: {str(e)}")
         

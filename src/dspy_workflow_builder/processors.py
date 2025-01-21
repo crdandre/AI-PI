@@ -6,6 +6,7 @@ import logging
 import dspy
 from dspy_workflow_builder.steps import BaseStep, LMStep
 from dspy_workflow_builder.utils.logging import log_step
+from dspy_workflow_builder.utils.text_utils import normalize_text_fields, serialize_paths
 
 
 class BaseProcessor:
@@ -16,16 +17,22 @@ class BaseProcessor:
 
     @log_step()
     def process(self, data: dict) -> dict:
-        self._validate_dependencies(data)
-        result = self._process(data)
-        
-        if not self._validate_output(result):
-            raise ValueError(f"Output validation failed for step: {self.step.step_type}")
-            
-        return result
+        pre_processed = self._pre_process(data)
+        result = self._process(pre_processed)
+        return self._post_process(result)
     
     def _process(self, data: dict) -> dict:
         raise NotImplementedError()
+    
+    def _pre_process(self, data: dict) -> dict:
+        self._validate_dependencies(data)
+        return normalize_text_fields(data)
+    
+    def _post_process(self, data: dict) -> dict:
+        result = serialize_paths(data)
+        if not self._validate_output(result):
+            raise ValueError(f"Output validation failed for step: {self.step.step_type}")
+        return result
         
     def _validate_dependencies(self, data: dict) -> None:
         """Validate that declared dependencies exist in data"""
@@ -59,8 +66,3 @@ class LMProcessor(dspy.Module, BaseProcessor):
             sig.__name__: predictor_class(sig)
             for sig in step.signatures
         }
-
-
-class ComputeProcessor(BaseProcessor):
-    """Base class for non-LM processors"""
-    pass 

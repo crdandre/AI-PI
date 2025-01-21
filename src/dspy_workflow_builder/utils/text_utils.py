@@ -1,5 +1,29 @@
 import unicodedata
 import re
+from pathlib import Path
+from typing import Any, Dict, List, Union
+
+def serialize_paths(obj: Any) -> Any:
+    """Convert Path objects to strings recursively in any data structure."""
+    if isinstance(obj, dict):
+        return {k: serialize_paths(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_paths(item) for item in obj]
+    elif isinstance(obj, Path):
+        return str(obj)
+    return obj
+
+def normalize_text_fields(obj: Any) -> Any:
+    """Normalize text fields and convert Path objects to strings recursively."""
+    if isinstance(obj, dict):
+        return {k: normalize_text_fields(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [normalize_text_fields(item) for item in obj]
+    elif isinstance(obj, str):
+        return normalize_unicode(obj)
+    elif isinstance(obj, Path):
+        return str(obj)
+    return obj
 
 def normalize_unicode(text: str) -> str:
     """Normalize Unicode characters for LLM processing while preserving mathematical meaning."""

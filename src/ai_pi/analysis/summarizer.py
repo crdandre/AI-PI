@@ -1,6 +1,6 @@
 import dspy
 from dspy_workflow_builder.steps import LMStep
-from dspy_workflow_builder.processors import BaseProcessor, LMProcessor
+from dspy_workflow_builder.processors import LMProcessor
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
 from dspy_workflow_builder.lm_config import LMForTask
 

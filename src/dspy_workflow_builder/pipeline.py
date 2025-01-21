@@ -11,6 +11,7 @@ import dspy
 
 from dspy_workflow_builder.steps import BaseStep, LMStep
 from dspy_workflow_builder.processors import BaseProcessor
+from dspy_workflow_builder.utils.text_utils import serialize_paths
 
 
 class ValidationError(Exception):
@@ -48,6 +49,9 @@ class Pipeline(dspy.Module):
 
     def execute(self, data: dict) -> dict:
         """Execute the complete processing pipeline."""
+
+        data = serialize_paths(data)
+        
         for step in self.config.steps:
             if self.config.verbose:
                 self.logger.info(f"Executing step: {step.step_type}")
