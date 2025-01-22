@@ -24,9 +24,6 @@ class DocumentExtractionProcessor(BaseProcessor):
             data['input_doc_path'], 
             write_to_file=False
         )
-        # with open('/home/christian/projects/agents/ai_pi/ref/sample_extract.json') as f:
-        #     sample_data = json.load(f)
-        # return sample_data
         
     def _validate_output(self, result: dict) -> bool:
         super()._validate_output(result)
@@ -53,7 +50,6 @@ class DocumentSummaryProcessor(BaseProcessor):
 class TopicContextProcessor(BaseProcessor):
     """Orchestrates topic context generation using STORM"""
     def _process(self, data: dict) -> dict:
-        return "Sample Context from STORM!"
         context_generator = StormContextGenerator(
             output_dir=data['output_dir']
         )
@@ -106,13 +102,10 @@ class OutputProcessor(BaseProcessor):
         )
         
         return {
-            'output_paths': {
-                'json': str(output_json),
-                'docx': str(output_path),
-                'pdf': str(output_dir / f"{paper_title}.pdf"),
-                'markdown': str(output_dir / f"{paper_title}.md"),
-                'lm_config': str(config_json)
-            }
+            'json': str(output_json),
+            'docx': str(output_path),
+            'pdf': str(output_dir / f"{paper_title}.pdf"),
+            'markdown': str(output_dir / f"{paper_title}.md"),
         }
 
 
