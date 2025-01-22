@@ -12,16 +12,17 @@ import logging
 import os
 import subprocess
 import re
-import dspy
 import json
 import time
+
+import dspy
 
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 
-from dspy_workflow_builder.parse_lm_config import LMForTask, TaskConfig, LMConfig
-from dspy_workflow_builder.utils.logging import setup_logging
+from big_dict_energy.lm_setup import LMForTask, TaskConfig, LMConfig
+from big_dict_energy.utils.logging import setup_logging
 
 load_dotenv()
 

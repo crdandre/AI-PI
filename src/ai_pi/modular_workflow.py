@@ -4,11 +4,11 @@ from datetime import datetime
 import json
 import copy
 
-from dspy_workflow_builder.parse_lm_config import DEFAULT_CONFIGS
-from dspy_workflow_builder.processors import BaseProcessor
-from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
-from dspy_workflow_builder.steps import BaseStep
-from dspy_workflow_builder.utils.logging import setup_logging
+from big_dict_energy.lm_setup import DEFAULT_CONFIGS
+from big_dict_energy.processors import BaseProcessor
+from big_dict_energy.pipeline import Pipeline, PipelineConfig
+from big_dict_energy.steps import BaseStep
+from big_dict_energy.utils.logging import setup_logging
 
 from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer

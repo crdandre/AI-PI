@@ -18,8 +18,8 @@ import json
 
 from ai_pi.document_handling.marker_extract_from_pdf import PDFTextExtractor
 from ai_pi.document_handling.section_identifier import SingleContextSectionIdentifier
-from dspy_workflow_builder.utils.text_utils import normalize_unicode
-from dspy_workflow_builder.utils.logging import setup_logging
+from big_dict_energy.utils.text_utils import normalize_unicode
+from big_dict_energy.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 

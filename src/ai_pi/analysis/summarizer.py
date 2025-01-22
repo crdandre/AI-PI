@@ -1,8 +1,8 @@
 import dspy
-from dspy_workflow_builder.steps import LMStep
-from dspy_workflow_builder.processors import LMProcessor
-from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
-from dspy_workflow_builder.parse_lm_config import LMForTask
+from big_dict_energy.steps import LMStep
+from big_dict_energy.processors import LMProcessor
+from big_dict_energy.pipeline import Pipeline, PipelineConfig
+from big_dict_energy.lm_setup import LMForTask
 import json
 
 
