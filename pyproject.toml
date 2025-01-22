@@ -15,7 +15,8 @@ authors = [
 ]
 dependencies = [
     "bayoo-docx ~= 0.2.20",
-    "big-dict-energy",
+    # "big-dict-energy",
+    "big-dict-energy @ git+https://github.com/crdandre/big_dict_energy.git@main",
     "dspy ~= 2.5.43",
     "einops ~= 0.8.0",
     "fuzzywuzzy ~= 0.18.0",
