@@ -54,8 +54,8 @@ class LMProcessor(dspy.Module, BaseProcessor):
         dspy.Module.__init__(self)
         BaseProcessor.__init__(self, step)
         
-        self.lm = step.lm_name.get_lm(step.task_config)
-        predictor_type = step.lm_name.get_predictor_type(step.task_config)
+        self.lm = step.lm_name.get_lm()
+        predictor_type = step.lm_name.get_predictor_type()
         
         try:
             predictor_class = getattr(dspy, predictor_type.value)

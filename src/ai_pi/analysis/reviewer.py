@@ -5,7 +5,7 @@ import dspy
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
 from dspy_workflow_builder.processors import LMProcessor as BaseProcessor
 from dspy_workflow_builder.steps import LMStep as ProcessingStep
-from dspy_workflow_builder.lm_config import LMForTask
+from dspy_workflow_builder.parse_lm_config import LMForTask
 
 class ReviewStepType(Enum):
     """Types of review steps available"""

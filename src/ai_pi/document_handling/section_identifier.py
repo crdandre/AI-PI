@@ -5,7 +5,7 @@ import re
 from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
 
-from dspy_workflow_builder.lm_config import LMConfig, LMForTask, TaskConfig
+from dspy_workflow_builder.parse_lm_config import LMConfig, LMForTask, TaskConfig
 from dspy_workflow_builder.utils.text_utils import normalize_unicode
 from dspy_workflow_builder.utils.logging import setup_logging
 
@@ -248,7 +248,7 @@ class SingleContextSectionIdentifier:
             return []
 
 if __name__ == "__main__":
-    import os
+    import datetime
     from dotenv import load_dotenv
     load_dotenv()
     from pathlib import Path

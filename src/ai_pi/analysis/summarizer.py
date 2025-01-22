@@ -2,7 +2,7 @@ import dspy
 from dspy_workflow_builder.steps import LMStep
 from dspy_workflow_builder.processors import LMProcessor
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
-from dspy_workflow_builder.lm_config import LMForTask
+from dspy_workflow_builder.parse_lm_config import LMForTask
 
 
 class SectionProcessor(LMProcessor):

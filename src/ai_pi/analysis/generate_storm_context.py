@@ -10,7 +10,7 @@ import os
 import logging
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
 from knowledge_storm.rm import SerperRM
-from dspy_workflow_builder.lm_config import LMForTask
+from dspy_workflow_builder.parse_lm_config import LMForTask
 from dspy_workflow_builder.utils.logging import setup_logging
 
 class StormContextGenerator:

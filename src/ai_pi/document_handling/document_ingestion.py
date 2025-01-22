@@ -177,18 +177,26 @@ def get_comment_context(text: str, start_pos: int, end_pos: int, context_chars: 
 
 def extract_document_history(file_path: str, write_to_file: bool = False) -> Union[Dict, str]:
     """Extract document history including images and tables."""
-    # Create logger inside the function where it's needed
     logger = logging.getLogger('document_ingestion')
     
     # Create output directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     paper_title = Path(file_path).stem
-    # Remove duplicate 'processed_documents' by using an absolute base path
     base_dir = Path('processed_documents').resolve()
     output_dir = base_dir / f"{paper_title}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    document_history = {}
+    document_history = {
+        'document_id': str(file_path),
+        'metadata': {
+            'last_modified': None,
+            'contributors': []
+        },
+        'sections': [],
+        'comments': [],
+        'revisions': [],
+        'tables': []
+    }
     
     # First attempt: Direct PDF conversion
     pdf_path = output_dir / f"{paper_title}.pdf"
@@ -220,7 +228,7 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
             document_history['markdown'] = markdown_text
             
     except Exception as e:
-        logger.warning(f"Direct PDF conversion failed: {e}. Trying two-step conversion...")
+        logger.warning(f"Direct PDF conversion failed: {str(e)}. Trying two-step conversion...")
         
         try:
             # Fallback: Two-step conversion through markdown
@@ -263,12 +271,12 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
                 document_history['markdown'] = markdown_text
                 
         except Exception as fallback_error:
-            logger.error(f"Both conversion approaches failed. Final error: {fallback_error}")
-            return None
+            logger.error(f"Both conversion approaches failed. Final error: {str(fallback_error)}")
+            raise ValueError(f"Document conversion failed: {str(fallback_error)}")
 
     if not full_text:
         logger.error("No text was extracted from the document")
-        return None
+        raise ValueError("No text was extracted from the document")
         
     with zipfile.ZipFile(file_path, 'r') as docx:
         document_xml = docx.read('word/document.xml')
@@ -276,18 +284,6 @@ def extract_document_history(file_path: str, write_to_file: bool = False) -> Uni
         namespace = {
             'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
             'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
-        }
-
-        # Initialize document history
-        document_history = {
-            'document_id': file_path,
-            'metadata': {
-                'last_modified': None,
-                'contributors': set()
-            },
-            'sections': [],
-            'comments': [],
-            'revisions': []
         }
 
         # Find all comment reference marks and their referenced text

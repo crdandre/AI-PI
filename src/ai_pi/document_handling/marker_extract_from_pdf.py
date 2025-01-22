@@ -20,7 +20,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 
-from dspy_workflow_builder.lm_config import LMForTask, TaskConfig, LMConfig
+from dspy_workflow_builder.parse_lm_config import LMForTask, TaskConfig, LMConfig
 from dspy_workflow_builder.utils.logging import setup_logging
 
 load_dotenv()

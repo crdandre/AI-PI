@@ -19,7 +19,7 @@ from ai_pi.document_handling.document_ingestion import extract_document_history
 class WorkflowStepType(Enum):
     """Types of workflow steps available"""
     DOCUMENT_EXTRACTION = "document_extraction"
-    DOCUMENT_SUMMARY = "document_summary"
+    DOCUMENT_ANALYSIS = "document_analysis"
     TOPIC_CONTEXT = "topic_context"
     DOCUMENT_REVIEW = "document_review"
     OUTPUT_GENERATION = "output_generation"
@@ -32,38 +32,29 @@ class DocumentExtractionProcessor(BaseProcessor):
             data['input_doc_path'], 
             write_to_file=False
         )
-
-        return {
-            **data,
-            self.step.output_key: document_history
-        }
         
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        output = result.get(self.step.output_key, {})
-        required_keys = {'sections', 'comments', 'revisions', 'metadata'}
-        return all(key in output for key in required_keys)
+        if not document_history or not isinstance(document_history, dict):
+            raise ValueError("Document extraction failed or invalid format")
+            
+        required_keys = ['sections', 'comments', 'revisions', 'metadata']
+        if not all(key in document_history for key in required_keys):
+            raise ValueError(f"Missing required keys in document_history")
+            
+        return {'document_history': document_history}
 
 
-class DocumentSummaryProcessor(BaseProcessor):
+class DocumentAnalysisProcessor(BaseProcessor):
     """Orchestrates document analysis using Summarizer"""
     def _process(self, data: dict) -> dict:
         summarizer = Summarizer(verbose=self.step.verbose)
-        topic, document_summary = summarizer.analyze_sectioned_document(data)
-        
+        topic, document_structure = summarizer.analyze_sectioned_document(
+            data['document_history']
+        )
         return {
-            **data,
-            self.step.output_key: {
-                'topic': topic,
-                'hierarchical_summary': document_summary                
-            }
+            'topic': topic,
+            'document_structure': document_structure,
+            'hierarchical_summary': document_structure['hierarchical_summary']
         }
-    
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        output = result.get(self.step.output_key, {})
-        required_keys = {'topic', 'hierarchical_summary'}
-        return all(key in output for key in required_keys)
 
 
 class TopicContextProcessor(BaseProcessor):
@@ -73,15 +64,7 @@ class TopicContextProcessor(BaseProcessor):
             output_dir=data['output_dir']
         )
         topic_context = context_generator.generate_context(data['topic'])
-        
-        return {
-            **data,
-            self.step.output_key: topic_context
-        }
-        
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        return(self.step.output_key in result)
+        return {'topic_context': topic_context}
 
 
 class DocumentReviewProcessor(BaseProcessor):
@@ -93,15 +76,7 @@ class DocumentReviewProcessor(BaseProcessor):
             data['topic_context'],
             data['hierarchical_summary']
         )
-        
-        return {
-            **data,
-            self.step.output_key: reviewed_document
-        }
-        
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        #TODO: validate fields of review when finalized
+        return {'reviewed_document': reviewed_document}
 
 
 class OutputProcessor(BaseProcessor):
@@ -110,10 +85,12 @@ class OutputProcessor(BaseProcessor):
         paper_title = data['paper_title']
         output_dir = data['output_dir']
         
+        # Write reviewed document to JSON
         output_json = output_dir / f"{paper_title}_reviewed.json"
         with open(output_json, 'w', encoding='utf-8') as f:
             json.dump(data['reviewed_document'], f, indent=4)
             
+        # Save LM configuration state
         lm_config_state = {
             "timestamp": data['timestamp'],
             "configs": {
@@ -129,6 +106,7 @@ class OutputProcessor(BaseProcessor):
         with open(config_json, 'w', encoding='utf-8') as f:
             json.dump(lm_config_state, f, indent=4)
             
+        # Generate output document
         output_path = output_dir / f"{paper_title}_reviewed.docx"
         output_commented_document(
             input_doc_path=data['input_doc_path'],
@@ -157,29 +135,29 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             output_key="document_history"
         ),
         BaseStep(
-            step_type=WorkflowStepType.DOCUMENT_SUMMARY,
-            processor_class=DocumentSummaryProcessor,
-            output_key="document_summary",
+            step_type=WorkflowStepType.DOCUMENT_ANALYSIS,
+            processor_class=DocumentAnalysisProcessor,
+            output_key="document_structure",
             depends_on=["document_history"]
         ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.TOPIC_CONTEXT,
-        #     processor_class=TopicContextProcessor,
-        #     output_key="topic_context",
-        #     depends_on=["topic"]
-        # ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.DOCUMENT_REVIEW,
-        #     processor_class=DocumentReviewProcessor,
-        #     output_key="reviewed_document",
-        #     depends_on=["document_history", "topic_context", "hierarchical_summary"]
-        # ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.OUTPUT_GENERATION,
-        #     processor_class=OutputProcessor,
-        #     output_key="output_paths",
-        #     depends_on=["reviewed_document"]
-        # )
+        BaseStep(
+            step_type=WorkflowStepType.TOPIC_CONTEXT,
+            processor_class=TopicContextProcessor,
+            output_key="topic_context",
+            depends_on=["topic"]
+        ),
+        BaseStep(
+            step_type=WorkflowStepType.DOCUMENT_REVIEW,
+            processor_class=DocumentReviewProcessor,
+            output_key="reviewed_document",
+            depends_on=["document_history", "topic_context", "hierarchical_summary"]
+        ),
+        BaseStep(
+            step_type=WorkflowStepType.OUTPUT_GENERATION,
+            processor_class=OutputProcessor,
+            output_key="output_paths",
+            depends_on=["reviewed_document"]
+        )
     ]
     return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
 
@@ -201,7 +179,6 @@ class PaperReview:
         """Execute the document review pipeline"""
         self.logger.info(f"Starting review of document: {input_doc_path}")
         
-        #TODO: configify this
         try:
             paper_title = Path(input_doc_path).stem
             base_dir = Path('processed_documents').resolve()
@@ -216,30 +193,15 @@ class PaperReview:
                 'timestamp': timestamp
             })
             
-            return results
+            return {
+
+                'paper_context': results['document_structure']['hierarchical_summary']['document_summary']['document_analysis'],
+                'document_structure': results['document_structure'],
+                'reviews': results['reviewed_document']['reviews'],
+                'output_dir': str(output_dir),
+                'output_files': results['output_paths']
+            }
             
         except Exception as e:
             self.logger.error(f"Error processing document: {str(e)}")
             raise ValueError(f"Error processing document: {str(e)}")
-        
-        
-if __name__ == "__main__":
-    # Example usage
-    input_path = "examples/DistractionCompressionPSRS2024Abstract.docx"
-    output_json_path = "/home/christian/projects/agents/ai_pi/ref/sample.json"
-    
-    paper_review = PaperReview(verbose=True)
-    
-    try:
-        output = paper_review.review_paper(input_doc_path=input_path)
-        print(f"Successfully created reviewed document")
-        
-        # Save output to JSON file - output should already be serialized by processors
-        with open(output_json_path, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=4)
-        print(f"Output saved to: {output_json_path}")
-            
-    except Exception as e:
-        print(f"Error processing document: {str(e)}")
-        
-        

@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Type, Optional, Union, TYPE_CHECKING
 from inspect import isclass
 
 import dspy
-from dspy_workflow_builder.lm_config import LMForTask, TaskConfig
+from dspy_workflow_builder.parse_lm_config import LMForTask, TaskConfig
 
 if TYPE_CHECKING:
     from dspy_workflow_builder.processors import BaseProcessor
@@ -27,7 +27,7 @@ class BaseStep:
 @dataclass
 class LMStep(BaseStep):
     """Configuration specific to LLM-based processing steps"""
-    lm_name: LMForTask = "default"
+    lm_name: str = "default"
     task_config: Optional[TaskConfig] = None
     signatures: Optional[List[Type[dspy.Signature]]] = None
     
