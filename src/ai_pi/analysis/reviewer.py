@@ -1,10 +1,10 @@
 from enum import Enum
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict
 import dspy
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
 from dspy_workflow_builder.processors import LMProcessor as BaseProcessor
-from dspy_workflow_builder.steps import LMStep as ProcessingStep
+from dspy_workflow_builder.steps import LMStep
 from dspy_workflow_builder.parse_lm_config import LMForTask
 
 class ReviewStepType(Enum):
@@ -30,38 +30,23 @@ class FullDocumentReviewProcessor(BaseProcessor):
         key_weaknesses: List[str] = dspy.OutputField(desc="List of key weaknesses identified")
         global_suggestions: List[str] = dspy.OutputField(desc="List of suggestions for improvement")
 
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         if not self.step.signatures:
             raise ValueError("No signatures configured for FullDocumentReviewer")        
         
-        dependencies = self.get_dependencies(data)       
         predictor = self.predictors[self.step.signatures[0].__name__]
-        document_text = data.get('full_text', '')
-        context = {
-            'research_problem': data.get('research_problem', ''),
-            'sections': data.get('sections', []),
-            'topic_context': data.get('topic_context', ''),
-            **dependencies,
-        }
-        criteria = data.get('criteria', {})
-        
         result = predictor(
-            document_text=document_text,
-            context=context,
-            criteria=criteria
+            document_text=data.get('full_text', ''),
+            context={**data},
+            criteria=data.get('criteria', {})
         )
         
         return {
-            **data,
             'overall_assessment': result.overall_assessment,
             'key_strengths': result.key_strengths,
             'key_weaknesses': result.key_weaknesses,
             'global_suggestions': result.global_suggestions
         }
-
-    def _validate_output(self, output: dict) -> bool:
-        """No specific validation needed for full document review"""
-        return True
 
 
 class ReviewItemsProcessor(BaseProcessor):
@@ -90,23 +75,21 @@ class ReviewItemsProcessor(BaseProcessor):
             format=List[Dict]
         )
 
-    def process(self, data: dict) -> dict:
+    def _process(self, data: dict) -> dict:
         """Process the input data to generate review items"""
         if not self.step.signatures:
             raise ValueError("No signatures configured for ReviewItemsProcessor")
         
-        dependencies = self.get_dependencies(data)
         all_review_items = []
+        section_text = data.get('section_text', '')
+        section_type = data.get('section_type', '')
         
         for signature in self.step.signatures:
             predictor = self.predictors[signature.__name__]
-            section_text = data.get('section_text', '')
-            section_type = data.get('section_type', '')
-
             result = predictor(
                 section_text=section_text,
                 section_type=section_type,
-                context=dependencies
+                context=data  # Pass all dependencies as context
             )
             
             review_items = result.review_items
@@ -122,10 +105,7 @@ class ReviewItemsProcessor(BaseProcessor):
                         item['section_type'] = section_type
                 all_review_items.extend(review_items)
         
-        return {
-            **data,
-            'review_items': all_review_items
-        }
+        return {'review_items': all_review_items}
     
     def _validate_output(self, output: dict) -> bool:
         """Validate review items structure is present and contains required fields"""
@@ -136,26 +116,23 @@ class ReviewItemsProcessor(BaseProcessor):
                 all(field in item for field in required_fields)
                 for item in output['review_items']
             )
-        else:
-            raise ValueError("Required field 'review_items' not found in output")
+        return False
 
 
 def create_reviewer_pipeline(verbose: bool = False) -> Pipeline:
     """Create pipeline with review steps"""
     steps = [
-        ProcessingStep(
+        LMStep(
             step_type=ReviewStepType.FULL_DOCUMENT_REVIEW,
             lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=FullDocumentReviewProcessor,
-            predictor_type="chain_of_thought",
             depends_on=["hierarchical_summary"],
             output_key="full_document_review",
         ),
-        ProcessingStep(
+        LMStep(
             step_type=ReviewStepType.REVIEW_ITEMS,
             lm_name=LMForTask.DOCUMENT_REVIEW,
             processor_class=ReviewItemsProcessor,
-            predictor_type="chain_of_thought",
             depends_on=["full_document_review"],
             output_key="review_items",
         ),

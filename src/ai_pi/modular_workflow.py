@@ -28,21 +28,14 @@ class WorkflowStepType(Enum):
 class DocumentExtractionProcessor(BaseProcessor):
     """Handles document extraction and validation"""
     def _process(self, data: dict) -> dict:
-        document_history = extract_document_history(
-            data['input_doc_path'], 
-            write_to_file=False
-        )
-
-        return {
-            **data,
-            self.step.output_key: document_history
-        }
+        with open('/home/christian/projects/agents/ai_pi/ref/sample_extract.json') as f:
+            sample_data = json.load(f)
+        return sample_data
         
     def _validate_output(self, result: dict) -> bool:
         super()._validate_output(result)
-        output = result.get(self.step.output_key, {})
         required_keys = {'sections', 'comments', 'revisions', 'metadata'}
-        return all(key in output for key in required_keys)
+        return all(key in result for key in required_keys)
 
 
 class DocumentSummaryProcessor(BaseProcessor):
@@ -50,58 +43,37 @@ class DocumentSummaryProcessor(BaseProcessor):
     def _process(self, data: dict) -> dict:
         summarizer = Summarizer(verbose=self.step.verbose)
         topic, document_summary = summarizer.analyze_sectioned_document(data)
-        
         return {
-            **data,
-            self.step.output_key: {
-                'topic': topic,
-                'hierarchical_summary': document_summary                
-            }
+            'topic': topic,
+            'hierarchical_summary': document_summary                
         }
     
     def _validate_output(self, result: dict) -> bool:
         super()._validate_output(result)
-        output = result.get(self.step.output_key, {})
         required_keys = {'topic', 'hierarchical_summary'}
-        return all(key in output for key in required_keys)
+        return all(key in result for key in required_keys)
 
 
 class TopicContextProcessor(BaseProcessor):
     """Orchestrates topic context generation using STORM"""
     def _process(self, data: dict) -> dict:
+        return "Sample Context from STORM!"
         context_generator = StormContextGenerator(
             output_dir=data['output_dir']
         )
-        topic_context = context_generator.generate_context(data['topic'])
-        
-        return {
-            **data,
-            self.step.output_key: topic_context
-        }
-        
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        return(self.step.output_key in result)
+        return context_generator.generate_context(data['topic'])
 
 
 class DocumentReviewProcessor(BaseProcessor):
     """Orchestrates document review using Reviewer"""
     def _process(self, data: dict) -> dict:
         reviewer = Reviewer(verbose=self.step.verbose)
-        reviewed_document = reviewer.review_document(
+        return reviewer.review_document(
             data['document_history'],
             data['topic_context'],
             data['hierarchical_summary']
         )
-        
-        return {
-            **data,
-            self.step.output_key: reviewed_document
-        }
-        
-    def _validate_output(self, result: dict) -> bool:
-        super()._validate_output(result)
-        #TODO: validate fields of review when finalized
+
 
 
 class OutputProcessor(BaseProcessor):
@@ -162,24 +134,24 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             output_key="document_summary",
             depends_on=["document_history"]
         ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.TOPIC_CONTEXT,
-        #     processor_class=TopicContextProcessor,
-        #     output_key="topic_context",
-        #     depends_on=["topic"]
-        # ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.DOCUMENT_REVIEW,
-        #     processor_class=DocumentReviewProcessor,
-        #     output_key="reviewed_document",
-        #     depends_on=["document_history", "topic_context", "hierarchical_summary"]
-        # ),
-        # BaseStep(
-        #     step_type=WorkflowStepType.OUTPUT_GENERATION,
-        #     processor_class=OutputProcessor,
-        #     output_key="output_paths",
-        #     depends_on=["reviewed_document"]
-        # )
+        BaseStep(
+            step_type=WorkflowStepType.TOPIC_CONTEXT,
+            processor_class=TopicContextProcessor,
+            output_key="topic_context",
+            depends_on=["document_summary.topic", "output_dir"]
+        ),
+        BaseStep(
+            step_type=WorkflowStepType.DOCUMENT_REVIEW,
+            processor_class=DocumentReviewProcessor,
+            output_key="reviewed_document",
+            depends_on=["document_history", "topic_context", "document_summary.hierarchical_summary"]
+        ),
+        BaseStep(
+            step_type=WorkflowStepType.OUTPUT_GENERATION,
+            processor_class=OutputProcessor,
+            output_key="output_paths",
+            depends_on=["reviewed_document"]
+        )
     ]
     return Pipeline(PipelineConfig(steps=steps, verbose=verbose))
 

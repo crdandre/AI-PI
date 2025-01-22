@@ -3,6 +3,7 @@ from dspy_workflow_builder.steps import LMStep
 from dspy_workflow_builder.processors import LMProcessor
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
 from dspy_workflow_builder.parse_lm_config import LMForTask
+import json
 
 
 class SectionProcessor(LMProcessor):
@@ -15,9 +16,7 @@ class SectionProcessor(LMProcessor):
         summary = dspy.OutputField(desc="Focused summary containing main points, evidence, findings, and significance")
     
     def _process(self, data: dict) -> dict:
-        # Get sections from document_history
-        document_history = data.get('document_history', {})
-        sections = document_history.get('sections', [])
+        sections = data.get('sections', [])
         summaries = []
         
         for section in sections:
@@ -31,7 +30,7 @@ class SectionProcessor(LMProcessor):
                     'summary': result.summary,
                     'match_strings': section['match_strings']
                 })
-        return {'section_summaries': summaries}
+        return summaries
 
 
 class RelationshipProcessor(LMProcessor):
@@ -44,13 +43,15 @@ class RelationshipProcessor(LMProcessor):
     
     def _process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
-        formatted_summaries = "\n\n".join(section_summaries)
+        # Convert the entire structure to a formatted string
+        formatted_summaries = json.dumps(section_summaries, indent=2)
         
         with dspy.context(lm=self.lm):
             result = self.predictors['Signature'](
                 summaries=formatted_summaries
             )
-        return {'relationship_analysis': result.analysis}
+
+        return result.analysis
 
 
 class DocumentProcessor(LMProcessor):
@@ -65,15 +66,15 @@ class DocumentProcessor(LMProcessor):
     def _process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
         relationship_analysis = data.get('relationship_analysis', '')
-        
-        formatted_summaries = "\n".join(section_summaries)
+        formatted_summaries = json.dumps(section_summaries, indent=2)
         
         with dspy.context(lm=self.lm):
             result = self.predictors['Signature'](
                 section_summaries=formatted_summaries,
                 relationships=relationship_analysis
             )
-        return {'document_analysis': result.analysis}
+
+        return result.analysis
 
 
 class TopicProcessor(LMProcessor):
@@ -90,7 +91,8 @@ class TopicProcessor(LMProcessor):
             result = self.predictors['Signature'](
                 analysis=document_analysis
             )
-        return {'topic': result.topic.strip()}
+        
+        return result.topic
 
 
 def create_summarizer_pipeline(verbose: bool = False) -> Pipeline:
@@ -142,6 +144,7 @@ class Summarizer:
         """
         results = self.pipeline.execute(document_json)
         
+        # Create a clean hierarchical summary without nesting the original document
         hierarchical_summary = {
             'topic': results['topic'],
             'document_summary': {'document_analysis': results['document_analysis']},
@@ -149,14 +152,13 @@ class Summarizer:
             'section_summaries': results['section_summaries']
         }
         
-        document_json['hierarchical_summary'] = hierarchical_summary
-        return results['topic'], document_json
+        # Return just the topic and hierarchical summary
+        return results['topic'], hierarchical_summary
 
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
-    import json
     import logging
     
     logger = logging.getLogger()

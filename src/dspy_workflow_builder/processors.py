@@ -7,6 +7,7 @@ import dspy
 from dspy_workflow_builder.steps import BaseStep, LMStep
 from dspy_workflow_builder.utils.logging import log_step
 from dspy_workflow_builder.utils.text_utils import normalize_text_fields, serialize_paths
+from functools import reduce
 
 
 class BaseProcessor:
@@ -21,31 +22,56 @@ class BaseProcessor:
         result = self._process(pre_processed)
         return self._post_process(result)
     
-    def _process(self, data: dict) -> dict:
-        raise NotImplementedError()
-    
-    def _pre_process(self, data: dict) -> dict:
-        self._validate_dependencies(data)
-        return normalize_text_fields(data)
-    
+    def _get_by_path(self, data: dict, path: str):
+        """Get a value from a nested dictionary using dot notation"""
+        return reduce(lambda d, key: d[key], path.split('.'), data)
+
     def _post_process(self, data: dict) -> dict:
         result = serialize_paths(data)
         if not self._validate_output(result):
-            raise ValueError(f"Output validation failed for step: {self.step.step_type}")
+            raise ValueError(
+                f"Output validation failed for step: {self.step.step_type}"
+                f"\n\nFailing Result:"
+                f"\n\n{result}"
+            )
         return result
+
+    def _pre_process(self, data: dict) -> dict:
+        self._validate_dependencies(data)
+        if self.step.depends_on:
+            return normalize_text_fields({
+                path.split('.')[-1]: self._get_by_path(data, path)
+                for path in self.step.depends_on
+            })
+        return normalize_text_fields(data)
+
+    def _process(self, data: dict) -> dict:
+        raise NotImplementedError()
+
+    def _try_get_path(self, data: dict, path: str) -> bool:
+        """Safely try to get a value by path, return False if not found"""
+        try:
+            self._get_by_path(data, path)
+            return True
+        except (KeyError, TypeError):
+            return False
         
     def _validate_dependencies(self, data: dict) -> None:
         """Validate that declared dependencies exist in data"""
         if not self.step.depends_on:
             return
             
-        missing = [dep for dep in self.step.depends_on if dep not in data]
+        missing = [
+            path for path in self.step.depends_on
+            if not self._try_get_path(data, path)
+        ]
+                
         if missing:
             raise ValueError(f"{self.__class__.__name__} missing required dependencies: {missing}")
-            
-    def _validate_output(self, result: dict) -> bool:
+
+    def _validate_output(self, result) -> bool:
         """Validate processor output. Override in subclasses for specific validation."""
-        return isinstance(result, dict) and bool(result)
+        return bool(result)
 
 
 class LMProcessor(dspy.Module, BaseProcessor):

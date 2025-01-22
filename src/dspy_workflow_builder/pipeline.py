@@ -54,12 +54,7 @@ class Pipeline(dspy.Module):
         
         # Use pipeline context for nested logging
         with pipeline_context(self.__class__.__name__):
-            indent = LogContext.get_indent()
-            
             for step in self.config.steps:
-                if self.config.verbose:
-                    self.logger.info(f"{indent}┌─ Executing step: {step.step_type}")
-
                 if step.step_type not in self.processors:
                     raise ValueError(f"No processor registered for step type: {step.step_type}")
 
@@ -67,17 +62,12 @@ class Pipeline(dspy.Module):
 
                 try:
                     result = processor.process(data)
-
                     if step.output_key:
                         data[step.output_key] = result
                     else:
                         data.update(result)
-                        
-                    if self.config.verbose:
-                        self.logger.info(f"{indent}└─ Completed step: {step.step_type}")
-
                 except Exception as e:
-                    self.logger.error(f"{indent}└─ Failed step: {step.step_type} - {str(e)}")
+                    self.logger.error(f"Failed step: {step.step_type} - {str(e)}")
                     raise
 
         return data 

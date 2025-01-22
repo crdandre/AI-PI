@@ -47,20 +47,15 @@ def log_step(logger_name: str = None):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             processor = args[0]
-            # Get processor name if no logger_name provided
             actual_logger_name = logger_name or processor.__class__.__name__
             logger = logging.getLogger(actual_logger_name)
-            
-            # Get current pipeline context indent
             indent = LogContext.get_indent()
             
-            # Get step name, handling both Enum and string types
             step_type = processor.step.step_type
-            if isinstance(step_type, Enum):
-                step_name = step_type.value
-            else:
-                step_name = str(step_type)
+            step_name = step_type.value if isinstance(step_type, Enum) else str(step_type)
             
+            # Use DEBUG for detailed step info, INFO for main flow
+            logger.debug(f"{indent}Starting step '{step_name}' with args: {kwargs}")
             logger.info(f"{indent}┌─ Starting step: {step_name}")
             start_time = time.time()
             
@@ -70,7 +65,7 @@ def log_step(logger_name: str = None):
                 logger.info(f"{indent}└─ Completed step: {step_name} ({duration:.2f}s)")
                 return result
             except Exception as e:
-                logger.error(f"{indent}└─ Failed step: {step_name} - {str(e)}")
+                logger.error(f"{indent}└─ Failed step: {step_name} - {str(e)}", exc_info=True)
                 raise
         return wrapper
     return decorator
