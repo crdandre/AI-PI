@@ -16,21 +16,17 @@ from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
 from ai_pi.document_handling.document_ingestion import extract_document_history
 
-class WorkflowStepType(Enum):
-    """Types of workflow steps available"""
-    DOCUMENT_EXTRACTION = "document_extraction"
-    DOCUMENT_SUMMARY = "document_summary"
-    TOPIC_CONTEXT = "topic_context"
-    DOCUMENT_REVIEW = "document_review"
-    OUTPUT_GENERATION = "output_generation"
-
 
 class DocumentExtractionProcessor(BaseProcessor):
     """Handles document extraction and validation"""
     def _process(self, data: dict) -> dict:
-        with open('/home/christian/projects/agents/ai_pi/ref/sample_extract.json') as f:
-            sample_data = json.load(f)
-        return sample_data
+        return extract_document_history(
+            data['input_doc_path'], 
+            write_to_file=False
+        )
+        # with open('/home/christian/projects/agents/ai_pi/ref/sample_extract.json') as f:
+        #     sample_data = json.load(f)
+        # return sample_data
         
     def _validate_output(self, result: dict) -> bool:
         super()._validate_output(result)
@@ -80,7 +76,7 @@ class OutputProcessor(BaseProcessor):
     """Handles final document output generation"""
     def _process(self, data: dict) -> dict:
         paper_title = data['paper_title']
-        output_dir = data['output_dir']
+        output_dir = Path(data['output_dir'])
         
         output_json = output_dir / f"{paper_title}_reviewed.json"
         with open(output_json, 'w', encoding='utf-8') as f:
@@ -90,10 +86,10 @@ class OutputProcessor(BaseProcessor):
             "timestamp": data['timestamp'],
             "configs": {
                 task: {
-                    "model_name": config.model_name,
-                    "temperature": config.temperature,
-                    "api_base": config.api_base,
-                    "max_tokens": config.max_tokens
+                    "model_name": config.lm_config.model_name,
+                    "temperature": config.lm_config.temperature,
+                    "api_base": config.lm_config.api_base,
+                    "max_tokens": config.lm_config.max_tokens
                 } for task, config in copy.deepcopy(DEFAULT_CONFIGS).items()
             }
         }
@@ -121,6 +117,15 @@ class OutputProcessor(BaseProcessor):
 
 
 def create_pipeline(verbose: bool = False) -> Pipeline:
+    class WorkflowStepType(Enum):
+        """Types of workflow steps available"""
+        DOCUMENT_EXTRACTION = "document_extraction"
+        DOCUMENT_SUMMARY = "document_summary"
+        TOPIC_CONTEXT = "topic_context"
+        DOCUMENT_REVIEW = "document_review"
+        OUTPUT_GENERATION = "output_generation"
+    
+    
     """Create the document processing pipeline"""
     steps = [
         BaseStep(
@@ -132,7 +137,7 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             step_type=WorkflowStepType.DOCUMENT_SUMMARY,
             processor_class=DocumentSummaryProcessor,
             output_key="document_summary",
-            depends_on=["document_history"]
+            depends_on=["document_history.sections"]
         ),
         BaseStep(
             step_type=WorkflowStepType.TOPIC_CONTEXT,
@@ -150,7 +155,7 @@ def create_pipeline(verbose: bool = False) -> Pipeline:
             step_type=WorkflowStepType.OUTPUT_GENERATION,
             processor_class=OutputProcessor,
             output_key="output_paths",
-            depends_on=["reviewed_document"]
+            depends_on=["input_doc_path", "output_dir", "paper_title", "reviewed_document", "timestamp"]
         )
     ]
     return Pipeline(PipelineConfig(steps=steps, verbose=verbose))

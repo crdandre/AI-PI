@@ -3,7 +3,7 @@ import json
 from typing import List, Dict
 import dspy
 from dspy_workflow_builder.pipeline import Pipeline, PipelineConfig
-from dspy_workflow_builder.processors import LMProcessor as BaseProcessor
+from dspy_workflow_builder.processors import LMProcessor
 from dspy_workflow_builder.steps import LMStep
 from dspy_workflow_builder.parse_lm_config import LMForTask
 
@@ -15,7 +15,7 @@ class ReviewStepType(Enum):
     REVIEW_ITEMS = "review_items"
 
 
-class FullDocumentReviewProcessor(BaseProcessor):
+class FullDocumentReviewProcessor(LMProcessor):
     class Signature(dspy.Signature):
         """(You're a freaking genius scientist whose ego rests on ability to create insightful publications)
         Review the entire document and assess it's pros and cons. Think beyond the paper, about
@@ -37,7 +37,7 @@ class FullDocumentReviewProcessor(BaseProcessor):
         predictor = self.predictors[self.step.signatures[0].__name__]
         result = predictor(
             document_text=data.get('full_text', ''),
-            context={**data},
+            context=data,
             criteria=data.get('criteria', {})
         )
         
@@ -49,7 +49,7 @@ class FullDocumentReviewProcessor(BaseProcessor):
         }
 
 
-class ReviewItemsProcessor(BaseProcessor):
+class ReviewItemsProcessor(LMProcessor):
     class Signature(dspy.Signature):
         """(You're a freaking genius scientist whose ego rests on ability to create insightful publications)
         Generate a list of relevant review items to address for the writer. These
@@ -89,7 +89,7 @@ class ReviewItemsProcessor(BaseProcessor):
             result = predictor(
                 section_text=section_text,
                 section_type=section_type,
-                context=data  # Pass all dependencies as context
+                context=data
             )
             
             review_items = result.review_items

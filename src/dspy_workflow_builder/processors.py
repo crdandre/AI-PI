@@ -39,6 +39,8 @@ class BaseProcessor:
     def _pre_process(self, data: dict) -> dict:
         self._validate_dependencies(data)
         if self.step.depends_on:
+            if "*" in self.step.depends_on:
+                return normalize_text_fields(data)
             return normalize_text_fields({
                 path.split('.')[-1]: self._get_by_path(data, path)
                 for path in self.step.depends_on
@@ -58,14 +60,14 @@ class BaseProcessor:
         
     def _validate_dependencies(self, data: dict) -> None:
         """Validate that declared dependencies exist in data"""
-        if not self.step.depends_on:
+        if not self.step.depends_on or "*" in self.step.depends_on:
             return
-            
+        
         missing = [
             path for path in self.step.depends_on
             if not self._try_get_path(data, path)
         ]
-                
+            
         if missing:
             raise ValueError(f"{self.__class__.__name__} missing required dependencies: {missing}")
 
@@ -81,6 +83,7 @@ class LMProcessor(dspy.Module, BaseProcessor):
         BaseProcessor.__init__(self, step)
         
         self.lm = step.lm_name.get_lm()
+        dspy.settings.configure(lm=self.lm)        
         predictor_type = step.lm_name.get_predictor_type()
         
         try:
@@ -92,3 +95,4 @@ class LMProcessor(dspy.Module, BaseProcessor):
             sig.__name__: predictor_class(sig)
             for sig in step.signatures
         }
+        

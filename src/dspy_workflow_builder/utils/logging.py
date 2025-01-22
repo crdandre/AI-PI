@@ -54,39 +54,37 @@ def log_step(logger_name: str = None):
             step_type = processor.step.step_type
             step_name = step_type.value if isinstance(step_type, Enum) else str(step_type)
             
-            # Use DEBUG for detailed step info, INFO for main flow
-            logger.debug(f"{indent}Starting step '{step_name}' with args: {kwargs}")
-            logger.info(f"{indent}┌─ Starting step: {step_name}")
+            # Simplified logging format
+            logger.debug(f"{indent}Processing: {step_name} {kwargs}")
+            logger.info(f"{indent}▶ {step_name}")
             start_time = time.time()
             
             try:
                 result = func(*args, **kwargs)
                 duration = time.time() - start_time
-                logger.info(f"{indent}└─ Completed step: {step_name} ({duration:.2f}s)")
+                # Only log duration if it's significant
+                duration_str = f" ({duration:.1f}s)" if duration > 0.1 else ""
+                logger.info(f"{indent}✓ {step_name}{duration_str}")
                 return result
             except Exception as e:
-                logger.error(f"{indent}└─ Failed step: {step_name} - {str(e)}", exc_info=True)
+                logger.error(f"{indent}✗ {step_name} - {str(e)}", exc_info=True)
                 raise
         return wrapper
     return decorator
 
 def setup_logging(log_dir: Path, timestamp: str, logger_name: str = None) -> logging.Logger:
     """Centralized logging configuration"""
-    # Reset the LogContext for new pipeline execution
     LogContext.reset()
     
-    # Configure root logger to catch all logging
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
-    
-    # Clear any existing handlers
     root_logger.handlers = []
     
-    # Setup handlers for root logger
+    # Simplified formats
     handlers = [
         (logging.FileHandler(log_dir / f"ai_pi_{timestamp}.log"), logging.DEBUG, 
-         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
-        (logging.StreamHandler(), logging.INFO, '%(message)s')  # Simplified console format
+         '%(asctime)s [%(levelname)s] %(message)s'),
+        (logging.StreamHandler(), logging.INFO, '%(message)s')
     ]
     
     for handler, level, format in handlers:
@@ -94,10 +92,7 @@ def setup_logging(log_dir: Path, timestamp: str, logger_name: str = None) -> log
         handler.setFormatter(logging.Formatter(format))
         root_logger.addHandler(handler)
     
-    # Get specific logger if requested
-    if logger_name:
-        return logging.getLogger(logger_name)
-    return root_logger
+    return logging.getLogger(logger_name) if logger_name else root_logger
 
 def debug_output(logger_name: str = None):
     """Decorator for debug output logging"""

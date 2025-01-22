@@ -18,18 +18,18 @@ class SectionProcessor(LMProcessor):
     def _process(self, data: dict) -> dict:
         sections = data.get('sections', [])
         summaries = []
-        
+   
         for section in sections:
-            with dspy.context(lm=self.lm):
-                result = self.predictors['Signature'](
-                    section_type=section['section_type'],
-                    text=section['text']
-                )
-                summaries.append({
-                    'section_type': section['section_type'],
-                    'summary': result.summary,
-                    'match_strings': section['match_strings']
-                })
+            result = self.predictors['Signature'](
+                section_type=section['section_type'],
+                text=section['text']
+            )
+            summaries.append({
+                'section_type': section['section_type'],
+                'summary': result.summary,
+                'match_strings': section['match_strings']
+            })
+        
         return summaries
 
 
@@ -43,13 +43,13 @@ class RelationshipProcessor(LMProcessor):
     
     def _process(self, data: dict) -> dict:
         section_summaries = data.get('section_summaries', [])
+        
         # Convert the entire structure to a formatted string
         formatted_summaries = json.dumps(section_summaries, indent=2)
         
-        with dspy.context(lm=self.lm):
-            result = self.predictors['Signature'](
-                summaries=formatted_summaries
-            )
+        result = self.predictors['Signature'](
+            summaries=formatted_summaries
+        )
 
         return result.analysis
 
@@ -68,11 +68,10 @@ class DocumentProcessor(LMProcessor):
         relationship_analysis = data.get('relationship_analysis', '')
         formatted_summaries = json.dumps(section_summaries, indent=2)
         
-        with dspy.context(lm=self.lm):
-            result = self.predictors['Signature'](
-                section_summaries=formatted_summaries,
-                relationships=relationship_analysis
-            )
+        result = self.predictors['Signature'](
+            section_summaries=formatted_summaries,
+            relationships=relationship_analysis
+        )
 
         return result.analysis
 
@@ -87,10 +86,10 @@ class TopicProcessor(LMProcessor):
     
     def _process(self, data: dict) -> dict:
         document_analysis = data.get('document_analysis', '')
-        with dspy.context(lm=self.lm):
-            result = self.predictors['Signature'](
-                analysis=document_analysis
-            )
+
+        result = self.predictors['Signature'](
+            analysis=document_analysis
+        )
         
         return result.topic
 
@@ -102,7 +101,7 @@ def create_summarizer_pipeline(verbose: bool = False) -> Pipeline:
             lm_name=LMForTask.SUMMARIZATION,
             processor_class=SectionProcessor,
             output_key="section_summaries",
-            depends_on=["document_history"]
+            depends_on=["*"]
         ),
         LMStep(
             step_type="relationship",
