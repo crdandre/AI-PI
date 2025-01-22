@@ -12,6 +12,7 @@ import dspy
 from dspy_workflow_builder.steps import BaseStep, LMStep
 from dspy_workflow_builder.processors import BaseProcessor
 from dspy_workflow_builder.utils.text_utils import serialize_paths
+from dspy_workflow_builder.utils.logging import pipeline_context, LogContext
 
 
 class ValidationError(Exception):
@@ -36,7 +37,7 @@ class Pipeline(dspy.Module):
         super().__init__()
         self.config = config
         self.processors: Dict[Union[str, Enum], Type[BaseProcessor]] = {}
-        self.logger = logging.getLogger("pipeline")
+        self.logger = logging.getLogger(self.__class__.__name__)
         
         for step in config.steps:
             self.register_processor(step.step_type, step.processor_class)
@@ -49,31 +50,34 @@ class Pipeline(dspy.Module):
 
     def execute(self, data: dict) -> dict:
         """Execute the complete processing pipeline."""
-
         data = serialize_paths(data)
         
-        for step in self.config.steps:
-            if self.config.verbose:
-                self.logger.info(f"Executing step: {step.step_type}")
-
-            if step.step_type not in self.processors:
-                raise ValueError(f"No processor registered for step type: {step.step_type}")
-
-            processor = self.processors[step.step_type](step)
-
-            try:
-                result = processor.process(data)
-
-                if step.output_key:
-                    data[step.output_key] = result
-                else:
-                    data.update(result)
-                    
+        # Use pipeline context for nested logging
+        with pipeline_context(self.__class__.__name__):
+            indent = LogContext.get_indent()
+            
+            for step in self.config.steps:
                 if self.config.verbose:
-                    self.logger.info(f"Completed step: {step.step_type}")
+                    self.logger.info(f"{indent}┌─ Executing step: {step.step_type}")
 
-            except Exception as e:
-                self.logger.error(f"Error in step {step.step_type}: {str(e)}")
-                raise
+                if step.step_type not in self.processors:
+                    raise ValueError(f"No processor registered for step type: {step.step_type}")
+
+                processor = self.processors[step.step_type](step)
+
+                try:
+                    result = processor.process(data)
+
+                    if step.output_key:
+                        data[step.output_key] = result
+                    else:
+                        data.update(result)
+                        
+                    if self.config.verbose:
+                        self.logger.info(f"{indent}└─ Completed step: {step.step_type}")
+
+                except Exception as e:
+                    self.logger.error(f"{indent}└─ Failed step: {step.step_type} - {str(e)}")
+                    raise
 
         return data 
