@@ -10,8 +10,8 @@ import os
 import logging
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
 from knowledge_storm.rm import SerperRM
-from big_dict_energy.lm_setup import LMForTask
-from big_dict_energy.utils.logging import setup_logging
+from oddspy.lm_setup import LMForTask
+from oddspy.utils.logging import setup_logging
 
 class StormContextGenerator:
     def __init__(self, 

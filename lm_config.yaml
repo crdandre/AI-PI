@@ -15,7 +15,7 @@ default:
   predictor_type: "ChainOfThought"
 
 summarization:
-  model_name: "openrouter/nvidia/llama-3.1-nemotron-70b-instruct"
+  model_name: "openrouter/deepseek/deepseek-chat"
   predictor_type: "Predict"
 
 document_review:

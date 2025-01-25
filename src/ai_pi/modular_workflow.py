@@ -4,11 +4,11 @@ from datetime import datetime
 import json
 import copy
 
-from big_dict_energy.lm_setup import DEFAULT_CONFIGS
-from big_dict_energy.processors import BaseProcessor
-from big_dict_energy.pipeline import Pipeline, PipelineConfig
-from big_dict_energy.steps import BaseStep
-from big_dict_energy.utils.logging import setup_logging
+from oddspy.lm_setup import DEFAULT_CONFIGS
+from oddspy.processors import BaseProcessor
+from oddspy.pipeline import Pipeline, PipelineConfig
+from oddspy.steps import BaseStep
+from oddspy.utils.logging import setup_logging
 
 from ai_pi.analysis.generate_storm_context import StormContextGenerator
 from ai_pi.analysis.summarizer import Summarizer
@@ -195,19 +195,12 @@ class PaperReview:
         
 if __name__ == "__main__":
     # Example usage
-    input_path = "examples/DistractionCompressionPSRS2024Abstract.docx"
-    output_json_path = "/home/christian/projects/agents/ai_pi/ref/sample.json"
-    
+    input_path = "examples/ScolioticFEPaper_v7.docx"
     paper_review = PaperReview(verbose=True)
     
     try:
         output = paper_review.review_paper(input_doc_path=input_path)
         print(f"Successfully created reviewed document")
-        
-        # Save output to JSON file - output should already be serialized by processors
-        with open(output_json_path, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=4)
-        print(f"Output saved to: {output_json_path}")
             
     except Exception as e:
         print(f"Error processing document: {str(e)}")

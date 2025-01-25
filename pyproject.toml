@@ -15,13 +15,14 @@ authors = [
 ]
 dependencies = [
     "bayoo-docx ~= 0.2.20",
-    # "big-dict-energy",
-    "big-dict-energy @ git+https://github.com/crdandre/big_dict_energy.git@main",
+    "oddspy",
+    # "oddspy @ git+https://github.com/crdandre/oddspy.git@main",
     "dspy ~= 2.5.43",
     "einops ~= 0.8.0",
     "fuzzywuzzy ~= 0.18.0",
     "marker-pdf ~= 1.2.3",
     "python-dotenv ~= 1.0.1",
+    "python-Levenshtein ~= 0.26.1",
     "llama-index-core",
     "llama-index-readers-file",
     "llama-index-llms-openai",

@@ -5,9 +5,9 @@ import re
 from typing import List, Dict, Union
 from json.decoder import JSONDecodeError
 
-from big_dict_energy.lm_setup import LMConfig, LMForTask, TaskConfig
-from big_dict_energy.utils.text_utils import normalize_unicode
-from big_dict_energy.utils.logging import setup_logging
+from oddspy.lm_setup import LMConfig, LMForTask, TaskConfig
+from oddspy.utils.text_utils import normalize_unicode
+from oddspy.utils.logging import setup_logging
 
 class HeadingInfo(dspy.Signature):
     """Structured output for a single heading"""

@@ -21,8 +21,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 
-from big_dict_energy.lm_setup import LMForTask, TaskConfig, LMConfig
-from big_dict_energy.utils.logging import setup_logging
+from oddspy.lm_setup import LMForTask, TaskConfig, LMConfig
+from oddspy.utils.logging import setup_logging
 
 load_dotenv()
 

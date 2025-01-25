@@ -1,8 +1,8 @@
 import dspy
-from big_dict_energy.steps import LMStep
-from big_dict_energy.processors import LMProcessor
-from big_dict_energy.pipeline import Pipeline, PipelineConfig
-from big_dict_energy.lm_setup import LMForTask
+from oddspy.steps import LMStep
+from oddspy.processors import LMProcessor
+from oddspy.pipeline import Pipeline, PipelineConfig
+from oddspy.lm_setup import LMForTask
 import json
 
 

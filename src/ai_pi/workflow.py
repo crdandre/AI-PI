@@ -12,8 +12,8 @@ from ai_pi.analysis.reviewer import Reviewer
 from ai_pi.document_handling.document_output import output_commented_document
 from ai_pi.document_handling.document_ingestion import extract_document_history
 
-from big_dict_energy.lm_setup import DEFAULT_CONFIGS
-from big_dict_energy.utils.logging import setup_logging
+from oddspy.lm_setup import DEFAULT_CONFIGS
+from oddspy.utils.logging import setup_logging
 
 
 class PaperReview:
