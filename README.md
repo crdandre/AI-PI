@@ -1,4 +1,8 @@
 # AI-PI
+[Demo](https://www.youtube.com/watch?v=ArPSZDJEqUg)
+
+<img height="300" alt="image" src="https://github.com/user-attachments/assets/170eb32f-3857-4b67-87a0-3e9ac98b305c" />
+
 Can't pin your PI down to review a manuscript?
 No problem! The AI-PI will take care of it!
 
@@ -25,11 +29,6 @@ apt-get installs:
 (from the repo root directory) 
 - Start API : `uvicorn src.ai_pi.main:app --reload --host localhost --port 8001`
 - Start Frontend: `cd frontend && npm run dev`
-
-## Design
-
-## Demonstration
-
 
 
 
