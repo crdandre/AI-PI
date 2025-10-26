@@ -7,7 +7,6 @@ this output.
 """
 import docx
 from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from fuzzywuzzy import fuzz
 import json
 
@@ -151,16 +150,6 @@ def output_commented_document(input_doc_path, review_struct, output_doc_path, ma
                 all_match_strings.append(item.get('match_string', ''))
                 all_comments.append(item.get('comment', ''))
                 all_revisions.append(item.get('revision', ''))
-
-    # # Process section review items from reviews section
-    # if 'reviews' in review_struct:
-    #     for section_review in review_struct['reviews'].get('section_reviews', []):
-    #         if 'review' in section_review and 'review_items' in section_review['review']:
-    #             for review_item in section_review['review']['review_items']:
-    #                 if isinstance(review_item, dict):
-    #                     all_match_strings.append(review_item.get('match_string', ''))
-    #                     all_comments.append(review_item.get('comment', ''))
-    #                     all_revisions.append(review_item.get('revision', ''))
 
     # Add revisions from the revisions section
     for revision in review_struct.get('revisions', []):

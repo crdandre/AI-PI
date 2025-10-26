@@ -12,16 +12,17 @@ import logging
 import os
 import subprocess
 import re
-import dspy
 import json
 import time
+
+import dspy
 
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 
-from ai_pi.lm_config import get_lm_for_task
-from ai_pi.utils.logging import setup_logging
+from oddspy.lm_setup import LMForTask, TaskConfig, LMConfig
+from oddspy.utils.logging import setup_logging
 
 load_dotenv()
 
@@ -97,11 +98,19 @@ class PDFTextExtractor:
         self.output_folder = output_folder
         self.format = format
         
-        # Task-specific LMs
-        self.image_caption_lm = get_lm_for_task("image_caption_extraction") if image_caption_lm is None else image_caption_lm
-        self.caption_analysis_lm = get_lm_for_task("caption_analysis") if caption_analysis_lm is None else caption_analysis_lm
-        self.caption_combination_lm = get_lm_for_task("caption_combination") if caption_combination_lm is None else caption_combination_lm
-        self.markdown_segmentation_lm = get_lm_for_task("markdown_segmentation") if markdown_segmentation_lm is None else markdown_segmentation_lm
+        # Task-specific LMs using enum configurations
+        self.image_caption_lm = LMForTask.IMAGE_CAPTION_EXTRACTION.get_lm() if image_caption_lm is None else (
+            image_caption_lm.create_lm() if isinstance(image_caption_lm, (LMConfig, TaskConfig)) else image_caption_lm
+        )
+        self.caption_analysis_lm = LMForTask.CAPTION_ANALYSIS.get_lm() if caption_analysis_lm is None else (
+            caption_analysis_lm.create_lm() if isinstance(caption_analysis_lm, (LMConfig, TaskConfig)) else caption_analysis_lm
+        )
+        self.caption_combination_lm = LMForTask.CAPTION_COMBINATION.get_lm() if caption_combination_lm is None else (
+            caption_combination_lm.create_lm() if isinstance(caption_combination_lm, (LMConfig, TaskConfig)) else caption_combination_lm
+        )
+        self.markdown_segmentation_lm = LMForTask.MARKDOWN_SEGMENTATION.get_lm() if markdown_segmentation_lm is None else (
+            markdown_segmentation_lm.create_lm() if isinstance(markdown_segmentation_lm, (LMConfig, TaskConfig)) else markdown_segmentation_lm
+        )
         
         self.caption_status = {}
 
@@ -205,7 +214,10 @@ class PDFTextExtractor:
             next_line = lines[i + 1] if i + 1 < len(lines) else ""
             
             # Analyze the next line for caption content
-            analyzer = dspy.Predict(CaptionAnalyzer, lm=self.caption_analysis_lm)
+            analyzer = getattr(dspy, LMForTask.CAPTION_ANALYSIS.get_predictor_type().value)(
+                CaptionAnalyzer, 
+                lm=self.caption_analysis_lm
+            )
             analysis_string = analyzer(text=next_line).answer
             analysis = json.loads(analysis_string)
             
@@ -214,8 +226,11 @@ class PDFTextExtractor:
                 result.append(next_line)
                 i += 2  # Skip past image and caption
             else:
-                # Extract caption from image
-                extractor = dspy.Predict(ImageCaptionExtractor, lm=self.image_caption_lm)
+                # Extract caption from image using configured predictor type
+                extractor = getattr(dspy, LMForTask.IMAGE_CAPTION_EXTRACTION.get_predictor_type().value)(
+                    ImageCaptionExtractor, 
+                    lm=self.image_caption_lm
+                )
                 image_caption = extractor(
                     image=dspy.Image.from_file(full_image_path),
                     question="Extract any figure caption text from this image."
