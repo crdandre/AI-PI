@@ -8,6 +8,8 @@ No problem! The AI-PI will take care of it!
 
 Jokes aside, this is a tool to aid in the review process and connect more directly to word documents which seem to remain quite common in manuscript draft preparation.
 
+You input a .docx of your abstract/manuscript, and this framework outputs a .docx with comments that ideally contain helpful feedback. I realize the current models utilized are outdated, will get around to updating that sooner or later, as I plan to eventually reinforce this with a collection of actual manuscript reviews that I've collected as well. You're welcome to try the same if you get to it before me!
+
 My mom added a contribution in `moms_addition`. I'm not sure what it does, but it's evidently crucial to correct function of the framework. Remove at your own peril.
 
 This design of this framework was inspired primarily by [STORM](https://github.com/stanford-oval/storm/tree/main/knowledge_storm) and [MMAPIS](https://github.com/fjiangAI/MMAPIS/tree/main?tab=readme-ov-file#how-to-run).
